@@ -72,9 +72,17 @@ class SQLiteConnWrapper:
         self.conn.commit()
 
 def get_db_connection(use_db=True):
-    """Create and return a MySQL connection using PyMySQL, falling back to SQLite if MySQL is unavailable."""
+    """Create and return a MySQL connection using PyMySQL, falling back to SQLite only for local dev if MySQL is unavailable."""
     global DB_ENGINE
     
+    is_production = (
+        os.getenv('FLASK_ENV') == 'production' or 
+        os.getenv('ENV') == 'production' or 
+        os.getenv('NODE_ENV') == 'production' or 
+        os.getenv('DB_STRICT') == 'true' or
+        os.getenv('FAIL_ON_DB_ERROR') == 'true'
+    )
+
     # First try MySQL
     try:
         kwargs = {
@@ -93,7 +101,10 @@ def get_db_connection(use_db=True):
         DB_ENGINE = 'mysql'
         return conn
     except Exception as mysql_err:
-        # Fallback to SQLite database file in backend directory
+        if is_production:
+            raise RuntimeError(f"[FATAL PRODUCTION DB ERROR] Failed to connect to shared MySQL database at {Config.MYSQL_HOST}:{Config.MYSQL_PORT}/{Config.MYSQL_DATABASE}. Error: {mysql_err}")
+        
+        # Fallback to SQLite database file in backend directory only during local development
         DB_ENGINE = 'sqlite'
         db_path = os.path.join(os.path.dirname(__file__), f"{Config.MYSQL_DATABASE}.db")
         sqlite_conn = sqlite3.connect(db_path, check_same_thread=False)

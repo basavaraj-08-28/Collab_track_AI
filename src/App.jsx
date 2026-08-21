@@ -36,6 +36,8 @@ import ReportsPage from './pages/instructor/ReportsPage';
 import InstructorProfilePage from './pages/instructor/InstructorProfilePage';
 import InstructorNotificationsPage from './pages/instructor/InstructorNotificationsPage';
 
+import StudentAIChatbot from './components/AI/StudentAIChatbot';
+
 const AppContent = () => {
   const { role, currentPage } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -116,6 +118,9 @@ const AppContent = () => {
           {renderPage()}
         </main>
       </div>
+
+      {/* Student AI Assistant Floating Chatbot */}
+      {role === 'student' && <StudentAIChatbot />}
     </div>
   );
 };

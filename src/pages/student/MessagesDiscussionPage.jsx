@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { studentService } from '../../services/studentService';
+import { API_BASE_URL } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import UserAvatar from '../../components/common/UserAvatar';
 import Badge from '../../components/common/Badge';
@@ -54,7 +55,25 @@ export const MessagesDiscussionPage = () => {
     if (!isSilent) setLoading(true);
     try {
       const data = await studentService.getProjectDiscussion(projId);
-      setProjectData(data);
+
+      if (import.meta.env.DEV) {
+        console.log(`DISCUSSION FETCH: project=${projId} messageCount=${data?.messages?.length || 0}`);
+      }
+      
+      setProjectData((prev) => {
+        const prevMessagesCount = prev?.messages?.length || 0;
+        const newMessagesCount = data?.messages?.length || 0;
+
+        // If new messages arrived (e.g. from another student/instructor on a different laptop), auto-scroll to bottom
+        if (newMessagesCount > prevMessagesCount) {
+          if (import.meta.env.DEV) {
+            console.log(`DISCUSSION UPDATE: project=${projId} oldCount=${prevMessagesCount} newCount=${newMessagesCount}`);
+          }
+          setTimeout(scrollToBottom, 100);
+        }
+        return data;
+      });
+
       if (!isSilent) {
         setTimeout(scrollToBottom, 100);
       }
@@ -69,6 +88,10 @@ export const MessagesDiscussionPage = () => {
 
   useEffect(() => {
     if (selectedProjectId) {
+      if (import.meta.env.DEV) {
+        console.log('DISCUSSION API:', API_BASE_URL);
+        console.log('PROJECT ID:', selectedProjectId);
+      }
       fetchProjectDiscussion(selectedProjectId, false);
     }
   }, [selectedProjectId]);
@@ -103,11 +126,19 @@ export const MessagesDiscussionPage = () => {
 
     try {
       const newMsg = await studentService.postProjectMessage(selectedProjectId, finalContent, attachmentUrl);
+      if (import.meta.env.DEV) {
+        console.log(`DISCUSSION POST: project=${selectedProjectId} messageId=${newMsg?.id}`);
+      }
       setProjectData((prev) => {
         if (!prev) return prev;
+        const existingMessages = prev.messages || [];
+        // Deduplicate message by ID
+        if (existingMessages.some((m) => m.id === newMsg.id)) {
+          return prev;
+        }
         return {
           ...prev,
-          messages: [...(prev.messages || []), newMsg]
+          messages: [...existingMessages, newMsg]
         };
       });
       setInputText('');

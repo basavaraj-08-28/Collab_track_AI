@@ -2,7 +2,10 @@
  * Centralized API Service for Collab Track AI Backend Communication
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const rawApiUrl = import.meta.env.VITE_API_URL;
+export const API_BASE_URL = (rawApiUrl && rawApiUrl.trim() !== '')
+  ? rawApiUrl
+  : (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('collab_track_auth_token');

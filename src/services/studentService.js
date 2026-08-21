@@ -87,6 +87,15 @@ export const studentService = {
     }
   },
 
+  async sendDiscussionHeartbeat(projectId) {
+    try {
+      return await api.post(`/student/discussions/projects/${projectId}/heartbeat`, {});
+    } catch (err) {
+      // Ignore heartbeat errors silently
+      return null;
+    }
+  },
+
   async postProjectMessage(projectId, message, attachmentUrl = null) {
     try {
       return await api.post(`/student/discussions/projects/${projectId}`, { message, attachmentUrl });
@@ -140,6 +149,14 @@ export const studentService = {
       return await api.get('/student/notifications');
     } catch (err) {
       return [];
+    }
+  },
+
+  async chatWithAI(message) {
+    try {
+      return await api.post('/student/ai/chat', { message });
+    } catch (err) {
+      throw err;
     }
   }
 };
