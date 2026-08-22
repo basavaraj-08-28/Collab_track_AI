@@ -26,18 +26,24 @@ app.register_blueprint(activities_bp, url_prefix='/api/activities')
 app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
 app.register_blueprint(instructor_bp, url_prefix='/api/instructor')
 
+# Initialize DB at module load time so tables exist on Vercel cold starts
+try:
+    init_db()
+except Exception as _init_err:
+    print(f"[WARN] init_db on import failed: {_init_err}")
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
+    from config import Config as _Cfg
+    db_info = _Cfg.TURSO_DATABASE_URL if _Cfg.TURSO_DATABASE_URL else os.path.basename(_Cfg.DATABASE_PATH)
     return jsonify({
         'status': 'healthy',
         'application': 'Collab Track AI API',
-        'database': f"SQLite ({os.path.basename(Config.DATABASE_PATH)})",
+        'database': f"Turso ({db_info})" if _Cfg.TURSO_DATABASE_URL else f"SQLite ({db_info})",
         'version': '1.0.0'
     }), 200
 
 if __name__ == '__main__':
-    # Initialize DB tables on startup
-    init_db()
     port = int(os.getenv('PORT', 5000))
     print(f"[OK] Collab Track AI Backend Flask Server running on http://localhost:{port}")
     app.run(host='0.0.0.0', port=port, debug=True)
