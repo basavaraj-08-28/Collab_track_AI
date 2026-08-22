@@ -3,8 +3,9 @@
  */
 
 const rawApiUrl = import.meta.env.VITE_API_URL;
-export const API_BASE_URL = (rawApiUrl && rawApiUrl.trim() !== '')
-  ? rawApiUrl
+const cleanRawUrl = rawApiUrl && rawApiUrl.trim() ? rawApiUrl.trim().replace(/\/+$/, '') : '';
+export const API_BASE_URL = cleanRawUrl
+  ? cleanRawUrl
   : (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
 const getAuthHeaders = () => {
