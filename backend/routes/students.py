@@ -277,27 +277,14 @@ def get_project_discussion(project_id):
             # Update project-scoped real-time presence for requesting user
             update_project_presence(project_id, user['id'])
 
-            # Fetch Members (Instructor + Enrolled Students)
-            cursor.execute("""
-                SELECT u.id, u.name, u.email, u.role, u.last_seen
-                FROM projects p
-                JOIN users u ON p.created_by = u.id
-                WHERE p.id = %s
-            """, (project_id,))
-            instructor_member = cursor.fetchone()
-
+            # Fetch Members (Enrolled Students only — instructors excluded from student discussion view)
             cursor.execute("""
                 SELECT u.id, u.name, u.email, u.role, u.last_seen
                 FROM users u
                 JOIN project_enrollments pe ON u.id = pe.user_id
                 WHERE pe.project_id = %s AND u.role = 'student'
             """, (project_id,))
-            student_members = cursor.fetchall()
-
-            raw_members = []
-            if instructor_member:
-                raw_members.append(instructor_member)
-            raw_members.extend(student_members)
+            raw_members = cursor.fetchall()
 
             # Deduplicate and compute presence dynamically from project-scoped presence store
             members = []
