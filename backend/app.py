@@ -31,7 +31,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'application': 'Collab Track AI API',
-        'database': Config.MYSQL_DATABASE,
+        'database': f"SQLite ({os.path.basename(Config.DATABASE_PATH)})",
         'version': '1.0.0'
     }), 200
 

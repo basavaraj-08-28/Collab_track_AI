@@ -21,7 +21,7 @@ async function handleRequest(requestFn) {
     response = await requestFn();
   } catch (err) {
     if (err.message && (err.message.includes('Failed to fetch') || err.name === 'TypeError')) {
-      throw new Error('Unable to connect to backend server. Please check if the Flask backend is running on port 5000.');
+      throw new Error('Unable to connect to backend server. Please verify network connection or backend availability.');
     }
     throw err;
   }
