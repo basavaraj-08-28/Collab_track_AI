@@ -88,6 +88,17 @@ export const AuthProvider = ({ children }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const switchRole = (newRole) => {
+    setRole(newRole);
+    if (newRole === 'instructor') {
+      setCurrentPage('instructor-dashboard');
+    } else if (newRole === 'student') {
+      setCurrentPage('student-dashboard');
+    } else {
+      setCurrentPage('landing');
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('collab_track_auth_token');
     api.post('/auth/logout', {}).catch(() => {});
@@ -100,6 +111,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         role,
+        setRole,
         user,
         setUser,
         loading,
@@ -108,6 +120,7 @@ export const AuthProvider = ({ children }) => {
         selectedProjectId,
         unreadNotificationsCount,
         navigateTo,
+        switchRole,
         login,
         register,
         logout,

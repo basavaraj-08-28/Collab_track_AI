@@ -17,7 +17,15 @@ import BrandLogo from '../../components/common/BrandLogo';
 import ScoreCircle from '../../components/common/ScoreCircle';
 
 export const LandingPage = () => {
-  const { navigateTo, switchRole } = useAuth();
+  const { navigateTo, user } = useAuth();
+
+  const handleGetStarted = () => {
+    if (user) {
+      navigateTo(user.role === 'instructor' ? 'instructor-dashboard' : 'student-dashboard');
+    } else {
+      navigateTo('register');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 overflow-hidden">
@@ -33,10 +41,7 @@ export const LandingPage = () => {
             Sign In
           </button>
           <button
-            onClick={() => {
-              switchRole('student');
-              navigateTo('student-dashboard');
-            }}
+            onClick={handleGetStarted}
             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all hover:scale-105"
           >
             Get Started Free
@@ -65,10 +70,7 @@ export const LandingPage = () => {
 
         <div className="flex items-center justify-center mb-16">
           <button
-            onClick={() => {
-              switchRole('student');
-              navigateTo('student-dashboard');
-            }}
+            onClick={handleGetStarted}
             className="w-full sm:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-600/30 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2"
           >
             <span>Get Started</span>
@@ -235,10 +237,7 @@ export const LandingPage = () => {
             Transform student group project grading with data-driven transparency and AI insight.
           </p>
           <button
-            onClick={() => {
-              switchRole('student');
-              navigateTo('student-dashboard');
-            }}
+            onClick={handleGetStarted}
             className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-2xl shadow-xl shadow-indigo-600/30 transition-all hover:scale-105"
           >
             Start Tracking Now
