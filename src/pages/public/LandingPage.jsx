@@ -11,8 +11,7 @@ import {
   Zap,
   Users,
   BarChart3,
-  CheckCircle,
-  Play
+  CheckCircle
 } from 'lucide-react';
 import BrandLogo from '../../components/common/BrandLogo';
 import ScoreCircle from '../../components/common/ScoreCircle';
@@ -64,7 +63,7 @@ export const LandingPage = () => {
           Collab Track AI uses artificial intelligence, machine learning and NLP to analyze team collaboration and provide transparent, data-driven contribution insights.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+        <div className="flex items-center justify-center mb-16">
           <button
             onClick={() => {
               switchRole('student');
@@ -74,17 +73,6 @@ export const LandingPage = () => {
           >
             <span>Get Started</span>
             <ArrowRight className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => {
-              switchRole('instructor');
-              navigateTo('instructor-dashboard');
-            }}
-            className="w-full sm:w-auto px-8 py-4 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 text-sm font-bold rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2"
-          >
-            <Play className="w-4 h-4 text-indigo-600 fill-indigo-600" />
-            <span>Explore Instructor Demo</span>
           </button>
         </div>
 
