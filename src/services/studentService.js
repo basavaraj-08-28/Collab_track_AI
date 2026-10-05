@@ -23,6 +23,14 @@ export const studentService = {
     }
   },
 
+  async getProjectById(projectId) {
+    try {
+      return await api.get(`/student/projects/${projectId}`);
+    } catch (err) {
+      throw err;
+    }
+  },
+
   async getTasks() {
     try {
       return await api.get('/student/tasks');
@@ -39,17 +47,21 @@ export const studentService = {
     }
   },
 
-  async submitTask(taskId, notes) {
+  async submitTask(taskId, notes = '', submissionFile = null) {
     try {
-      return await api.post('/student/tasks/submit', { taskId, notes });
+      const fileName = typeof submissionFile === 'string' 
+        ? submissionFile 
+        : (submissionFile?.name || null);
+      return await api.post('/student/tasks/submit', { taskId, notes, submissionFile: fileName });
     } catch (err) {
       throw err;
     }
   },
 
-  async getActivity() {
+  async getActivity(filter = 'All') {
     try {
-      return await api.get('/student/activity');
+      const query = filter && filter !== 'All' ? `?filter=${encodeURIComponent(filter)}` : '';
+      return await api.get(`/student/activity${query}`);
     } catch (err) {
       return [];
     }
@@ -120,11 +132,19 @@ export const studentService = {
     }
   },
 
-  async getAnalytics() {
+  async getAnalytics(range = 'Last 30 days') {
     try {
-      return await api.get('/student/analytics');
+      const query = range ? `?range=${encodeURIComponent(range)}` : '';
+      return await api.get(`/student/analytics${query}`);
     } catch (err) {
-      return { trendData: [], radarData: [], activityData: [] };
+      return { 
+        weeklyParticipation: [], 
+        taskCompletion: [], 
+        scoreTrend: [], 
+        communicationQuality: [], 
+        activityDistribution: [],
+        summary: null
+      };
     }
   },
 

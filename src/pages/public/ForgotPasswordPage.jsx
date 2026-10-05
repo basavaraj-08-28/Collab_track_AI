@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { Sparkles, ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export const ForgotPasswordPage = () => {
   const { navigateTo } = useAuth();
@@ -18,8 +19,8 @@ export const ForgotPasswordPage = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
       <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200 p-8 sm:p-10 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-600/30">
-          <Sparkles className="w-6 h-6" />
+        <div className="mb-6 flex justify-center">
+          <BrandLogo size="lg" onClick={() => navigateTo('landing')} />
         </div>
 
         <h2 className="text-2xl font-black text-slate-900 tracking-tight">Reset Password</h2>

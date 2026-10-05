@@ -14,6 +14,7 @@ import {
   CheckCircle,
   Play
 } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 import ScoreCircle from '../../components/common/ScoreCircle';
 
 export const LandingPage = () => {
@@ -23,17 +24,7 @@ export const LandingPage = () => {
     <div className="min-h-screen bg-slate-50 text-slate-900 overflow-hidden">
       {/* Top Floating Header */}
       <nav className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <Sparkles className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xl font-black tracking-tight text-slate-900">COLLAB TRACK AI</span>
-            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              AI-Powered Collaboration Intelligence
-            </span>
-          </div>
-        </div>
+        <BrandLogo size="lg" onClick={() => navigateTo('landing')} />
 
         <div className="flex items-center gap-4">
           <button

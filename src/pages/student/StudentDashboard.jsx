@@ -17,7 +17,8 @@ import {
   Brain,
   Sparkles,
   FolderKanban,
-  AlertCircle
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 
 export const StudentDashboard = () => {
@@ -76,7 +77,7 @@ export const StudentDashboard = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            Good morning, {realName} 👋
+            Hello, {realName} 👋
           </h1>
           <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">
             Here’s your collaboration overview for this workspace.
@@ -87,43 +88,39 @@ export const StudentDashboard = () => {
       {/* Statistics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatCard
-          title="Overall Collaboration Score"
-          value={hasScore ? `${scoreData.overall} / 100` : 'No Score Yet'}
-          subtext={
-            hasScore
-              ? scoreData.label || 'Evaluated by AI'
-              : 'Appears after sufficient activity is analyzed'
-          }
-          trend={hasScore ? scoreData.percentile || 'Real-time' : 'Pending'}
-          trendType={hasScore ? 'up' : 'neutral'}
-          icon={Award}
-          iconBg="bg-indigo-50 text-indigo-600"
-        />
-        <StatCard
           title="Active Projects"
           value={projects.length}
           subtext={projects.length > 0 ? `${projects.length} assigned project(s)` : 'No active projects'}
           trend={projects.length > 0 ? 'Assigned' : 'Empty'}
           trendType={projects.length > 0 ? 'up' : 'neutral'}
           icon={FolderKanban}
-          iconBg="bg-blue-50 text-blue-600"
+          iconBg="bg-indigo-50 text-indigo-600"
         />
         <StatCard
           title="Tasks Completed"
           value={data?.totalTasks ? `${data.tasksCompleted} / ${data.totalTasks}` : '0 / 0'}
-          subtext={data?.totalTasks ? `${Math.round((data.tasksCompleted / data.totalTasks) * 100)}% Velocity` : 'No tasks assigned'}
+          subtext={data?.totalTasks ? `${Math.round((data.tasksCompleted / data.totalTasks) * 100)}% Completed` : 'Sprint deliverables'}
           trend={data?.tasksCompleted > 0 ? `+${data.tasksCompleted} completed` : '0 completed'}
           trendType={data?.tasksCompleted > 0 ? 'up' : 'neutral'}
           icon={CheckSquare}
           iconBg="bg-emerald-50 text-emerald-600"
         />
         <StatCard
-          title="Participation Rate"
-          value={hasScore ? `${scoreData.components?.find((c) => c.name.includes('Participation'))?.score || 0}%` : 'No Data'}
-          subtext={hasScore ? 'Based on project activity' : 'Awaiting collaboration activity'}
-          trend={hasScore ? 'Active' : 'Pending'}
-          trendType={hasScore ? 'up' : 'neutral'}
-          icon={Activity}
+          title="Pending Deliverables"
+          value={data?.stats?.pendingTasks ?? (data?.totalTasks ? data.totalTasks - (data.tasksCompleted || 0) : 0)}
+          subtext="Assigned tasks in sprint"
+          trend="Deliverables"
+          trendType="neutral"
+          icon={Clock}
+          iconBg="bg-amber-50 text-amber-600"
+        />
+        <StatCard
+          title="Discussion Updates"
+          value={activities.length}
+          subtext="Recent workspace activities"
+          trend="Live Activity"
+          trendType="up"
+          icon={MessageSquare}
           iconBg="bg-purple-50 text-purple-600"
         />
       </div>
@@ -131,7 +128,7 @@ export const StudentDashboard = () => {
       {/* AI Assessment Spotlight Card */}
       {hasScore ? (
         <div
-          onClick={() => navigateTo('my-score')}
+          onClick={() => navigateTo('student-analytics')}
           className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl border border-indigo-700/40 cursor-pointer hover:border-indigo-500/60 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
         >
           <div className="flex items-center gap-4">
@@ -141,17 +138,17 @@ export const StudentDashboard = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
-                  AI Spotlight Assessment
+                  AI Academic Progress Insights
                 </span>
-                <Badge variant="ai">Score: {scoreData.overall}</Badge>
+                <Badge variant="ai">Active</Badge>
               </div>
               <p className="text-xs text-slate-200 mt-1 max-w-2xl leading-relaxed">
-                "{scoreData.aiAssessment || 'Your collaboration performance has been analyzed by the Collab Track AI engine.'}"
+                "{scoreData.aiAssessment || 'Your project progress and deliverable milestones are tracked in real-time.'}"
               </p>
             </div>
           </div>
           <div className="flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-white transition-colors shrink-0">
-            <span>View Score Breakdown</span>
+            <span>View Analytics</span>
             <ArrowRight className="w-4 h-4" />
           </div>
         </div>
@@ -163,10 +160,10 @@ export const StudentDashboard = () => {
             </div>
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-                No Collaboration Assessment Yet
+                Workspace Overview
               </span>
               <p className="text-xs text-slate-300 mt-1">
-                Your collaboration score and AI insights will be generated automatically after you participate in assigned projects and tasks.
+                Your deliverables and project updates will appear automatically as you work on assigned tasks.
               </p>
             </div>
           </div>
@@ -235,7 +232,9 @@ export const StudentDashboard = () => {
                     <div className="text-right">
                       <span className="text-xs text-slate-500 font-medium block">Collaboration Score</span>
                       <span className="text-sm font-extrabold text-indigo-600">
-                        {proj.collaborationScore ? `${proj.collaborationScore} / 100` : 'Pending'}
+                        {proj.collaborationScore !== null && proj.collaborationScore !== undefined
+                          ? `${proj.collaborationScore} / 100`
+                          : 'Pending'}
                       </span>
                     </div>
                   </div>
@@ -263,21 +262,13 @@ export const StudentDashboard = () => {
               <Activity className="w-5 h-5 text-indigo-600" />
               Recent Activity
             </h3>
-            {activities.length > 0 && (
-              <button
-                onClick={() => navigateTo('collaboration-activity')}
-                className="text-xs font-bold text-indigo-600 hover:underline"
-              >
-                Full Timeline →
-              </button>
-            )}
           </div>
 
           {activities.length === 0 ? (
             <EmptyState
               icon={Activity}
-              title="No Collaboration Activity Yet"
-              message="Your collaboration activities will appear here as you participate in projects."
+              title="No Activity Logged"
+              message="Your sprint activities and task submissions will appear here as you participate."
             />
           ) : (
             <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs space-y-4">

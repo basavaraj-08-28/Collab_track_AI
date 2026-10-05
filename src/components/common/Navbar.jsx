@@ -9,6 +9,7 @@ import {
   Shield,
   GraduationCap
 } from 'lucide-react';
+import BrandLogo from './BrandLogo';
 import UserAvatar from './UserAvatar';
 
 export const Navbar = ({ onToggleSidebar }) => {
@@ -29,28 +30,14 @@ export const Navbar = ({ onToggleSidebar }) => {
           </svg>
         </button>
 
-        <div
+        <BrandLogo
+          size="md"
           onClick={() =>
             navigateTo(
               role === 'instructor' ? 'instructor-dashboard' : role === 'student' ? 'student-dashboard' : 'landing'
             )
           }
-          className="flex items-center gap-2.5 cursor-pointer group select-none"
-        >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-blue-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform duration-300">
-            <Sparkles className="w-5 h-5 text-indigo-100" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-base font-extrabold tracking-tight text-slate-900 group-hover:text-indigo-600 transition-colors">
-                COLLAB TRACK AI
-              </span>
-            </div>
-            <p className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase hidden sm:block">
-              AI-Powered Collaboration Intelligence
-            </p>
-          </div>
-        </div>
+        />
       </div>
 
       {/* Right Actions */}

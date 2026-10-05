@@ -136,7 +136,9 @@ export const MyProjectsPage = () => {
                     <div>
                       <span className="text-slate-500 text-[10px] uppercase font-bold block">Collaboration Score</span>
                       <span className="font-extrabold text-indigo-600">
-                        {proj.collaborationScore ? `${proj.collaborationScore} / 100` : 'Pending'}
+                        {proj.collaborationScore !== null && proj.collaborationScore !== undefined
+                          ? `${proj.collaborationScore} / 100`
+                          : 'Pending'}
                       </span>
                     </div>
                   </div>

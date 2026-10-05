@@ -315,6 +315,18 @@ def init_db():
                 cursor.execute("ALTER TABLE tasks ADD COLUMN priority TEXT DEFAULT 'Medium';")
             except Exception:
                 pass
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN submission_file TEXT;")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN submission_notes TEXT;")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN submitted_at TIMESTAMP NULL;")
+            except Exception:
+                pass
 
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS activities (

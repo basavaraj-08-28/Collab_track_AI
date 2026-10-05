@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { Sparkles, ArrowRight, Lock, Mail } from 'lucide-react';
+import { ArrowRight, Lock, Mail } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export const LoginPage = () => {
   const { login, navigateTo } = useAuth();
@@ -36,11 +37,8 @@ export const LoginPage = () => {
           <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl" />
 
           <div>
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-lg font-black tracking-tight">COLLAB TRACK AI</span>
+            <div className="mb-8">
+              <BrandLogo size="lg" theme="light-text" showSubtitle={false} onClick={() => navigateTo('landing')} />
             </div>
 
             <h2 className="text-2xl font-black tracking-tight leading-tight mb-4">
@@ -64,6 +62,10 @@ export const LoginPage = () => {
 
         {/* Right Side Form Card */}
         <div className="p-8 sm:p-12 flex flex-col justify-center">
+          <div className="lg:hidden mb-6 flex justify-center">
+            <BrandLogo size="md" onClick={() => navigateTo('landing')} />
+          </div>
+
           <div className="mb-6">
             <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight">Welcome Back</h3>
             <p className="text-xs text-slate-500 mt-1">Please enter your registered email and password to log in.</p>

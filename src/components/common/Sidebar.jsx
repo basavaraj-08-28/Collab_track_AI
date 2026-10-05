@@ -27,9 +27,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
     { id: 'student-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'my-projects', label: 'My Projects', icon: FolderKanban },
     { id: 'my-tasks', label: 'My Tasks', icon: CheckSquare },
-    { id: 'collaboration-activity', label: 'Collaboration', icon: Activity },
     { id: 'messages', label: 'Discussions', icon: MessageSquare },
-    { id: 'my-score', label: 'My Score', icon: Award, highlight: true },
     { id: 'student-analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'student-profile', label: 'Profile', icon: User },
   ];
@@ -45,8 +43,6 @@ export const Sidebar = ({ isOpen, onClose }) => {
   ];
 
   const links = role === 'instructor' ? instructorLinks : studentLinks;
-
-  const hasScore = user?.overallScore !== null && user?.overallScore !== undefined;
 
   return (
     <>
@@ -109,31 +105,18 @@ export const Sidebar = ({ isOpen, onClose }) => {
           })}
         </div>
 
-        {/* Bottom Score Preview Card & Logout */}
+        {/* Bottom Workspace Card & Logout */}
         <div className="p-4 border-t border-slate-800 space-y-3 bg-slate-950/40">
           {role === 'student' ? (
             <div
-              onClick={() => navigateTo('my-score')}
-              className="bg-gradient-to-br from-indigo-900/60 to-slate-900 border border-indigo-700/40 p-3.5 rounded-2xl cursor-pointer hover:border-indigo-500/60 transition-colors"
+              onClick={() => navigateTo('student-profile')}
+              className="bg-gradient-to-br from-indigo-950/60 to-slate-900 border border-slate-800 p-3.5 rounded-2xl cursor-pointer hover:border-indigo-500/60 transition-colors"
             >
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-indigo-300 font-semibold">Collaboration Score</span>
-                {hasScore ? (
-                  <span className="text-emerald-400 font-bold">{user.overallScore} / 100</span>
-                ) : (
-                  <span className="text-slate-400 font-semibold text-[11px]">No Score Yet</span>
-                )}
+                <span className="text-slate-300 font-semibold truncate">{user?.name || 'Student Portal'}</span>
+                <span className="text-emerald-400 font-bold text-[10px]">Active</span>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full transition-all duration-500"
-                  style={{ width: `${hasScore ? user.overallScore : 0}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-slate-400 mt-2 flex items-center justify-between">
-                <span>{hasScore ? (user.scoreLabel || 'Active Collaborator') : 'Requires activity data'}</span>
-                <span className="text-indigo-400 underline font-semibold">Details →</span>
-              </p>
+              <p className="text-[10px] text-slate-400 truncate">{user?.email || 'Student Account'}</p>
             </div>
           ) : (
             <div

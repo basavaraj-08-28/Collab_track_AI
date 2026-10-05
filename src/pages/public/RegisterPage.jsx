@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { Sparkles, ArrowRight, User, Mail, Lock, GraduationCap, Shield } from 'lucide-react';
+import { ArrowRight, User, Mail, Lock, GraduationCap, Shield } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export const RegisterPage = () => {
   const { register, navigateTo } = useAuth();
@@ -41,8 +42,8 @@ export const RegisterPage = () => {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
       <div className="max-w-xl w-full bg-white rounded-3xl shadow-2xl border border-slate-200 p-8 sm:p-10">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto mb-3 shadow-lg shadow-indigo-600/30">
-            <Sparkles className="w-6 h-6" />
+          <div className="mb-4 flex justify-center">
+            <BrandLogo size="lg" onClick={() => navigateTo('landing')} />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Create your Account</h2>
           <p className="text-xs text-slate-500 mt-1">Join Collab Track AI for data-driven contribution analysis.</p>

@@ -85,6 +85,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     status ENUM('Pending', 'In Progress', 'Completed', 'Overdue') DEFAULT 'Pending',
     due_date DATE NULL,
     score_impact INT DEFAULT 5,
+    submission_file VARCHAR(500) NULL,
+    submission_notes TEXT NULL,
+    submitted_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL

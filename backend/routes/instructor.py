@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash
 from db import get_db_connection
 from routes.auth import get_current_user_from_request
+from routes.students import compute_student_collaboration_score
 
 instructor_bp = Blueprint('instructor', __name__)
 
@@ -254,10 +255,10 @@ def assign_project():
             if existing:
                 return jsonify({'error': 'Student is already assigned to this project.', 'alreadyAssigned': True}), 409
 
-            # Insert enrollment record
+            # Insert enrollment record with 0.00 initial score
             cursor.execute("""
                 INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
-                VALUES (%s, %s, 75.00, 'Active')
+                VALUES (%s, %s, 0.00, 'Active')
             """, (project_id, student_id))
 
             # Increment student count in projects table
@@ -326,7 +327,7 @@ def add_student():
             if project_id:
                 cursor.execute("""
                     INSERT INTO project_enrollments (project_id, user_id, group_id, collaboration_score, status)
-                    VALUES (%s, %s, %s, 75.00, 'Active')
+                    VALUES (%s, %s, %s, 0.00, 'Active')
                     ON DUPLICATE KEY UPDATE group_id = %s
                 """, (project_id, user_id, group_id, group_id))
 
@@ -340,6 +341,9 @@ def add_student():
                 WHERE u.id = %s
             """, (user_id,))
             student_res = cursor.fetchone()
+            if student_res and project_id:
+                sc = compute_student_collaboration_score(cursor, user_id, project_id)
+                student_res['score'] = sc['overall']
 
         return jsonify(student_res), 201
     finally:
@@ -369,11 +373,29 @@ def run_ai_grading():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT u.id, u.name, u.email, pe.collaboration_score as score, pe.grade FROM users u LEFT JOIN project_enrollments pe ON u.id = pe.user_id WHERE u.role = 'student'")
+            cursor.execute("""
+                SELECT u.id, u.name, u.email, pe.project_id, pe.collaboration_score as score, pe.grade 
+                FROM users u 
+                LEFT JOIN project_enrollments pe ON u.id = pe.user_id 
+                WHERE u.role = 'student'
+            """)
             students = cursor.fetchall()
             for s in students:
-                s['score'] = float(s['score']) if s['score'] is not None else 75.0
-                s['grade'] = s['grade'] or 'B'
+                p_id = s.get('project_id')
+                sc = compute_student_collaboration_score(cursor, s['id'], p_id)['overall']
+                s['score'] = sc
+                if sc >= 90:
+                    s['grade'] = 'A+'
+                elif sc >= 80:
+                    s['grade'] = 'A'
+                elif sc >= 70:
+                    s['grade'] = 'B'
+                elif sc >= 50:
+                    s['grade'] = 'C'
+                elif sc > 0:
+                    s['grade'] = 'D'
+                else:
+                    s['grade'] = 'Pending'
         return jsonify({'message': 'AI Grading completed', 'grades': students}), 200
     finally:
         conn.close()

@@ -63,12 +63,8 @@ const AppContent = () => {
         return <ProjectDetailsPage />;
       case 'my-tasks':
         return <MyTasksPage />;
-      case 'collaboration-activity':
-        return <CollaborationActivityPage />;
       case 'messages':
         return <MessagesDiscussionPage />;
-      case 'my-score':
-        return <MyCollaborationScorePage />;
       case 'student-analytics':
         return <PerformanceAnalyticsPage />;
       case 'student-profile':
