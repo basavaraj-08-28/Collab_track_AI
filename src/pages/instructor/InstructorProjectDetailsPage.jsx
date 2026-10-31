@@ -17,6 +17,7 @@ export const InstructorProjectDetailsPage = () => {
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
+  const [allStudents, setAllStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -36,6 +37,11 @@ export const InstructorProjectDetailsPage = () => {
   const [selectedTaskForAssign, setSelectedTaskForAssign] = useState(null);
   const [assignStudentId, setAssignStudentId] = useState('');
 
+  // Enroll Student Modal State
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [enrollStudentId, setEnrollStudentId] = useState('');
+  const [isEnrolling, setIsEnrolling] = useState(false);
+
   const fetchProjectData = async () => {
     setLoading(true);
     setError(null);
@@ -49,12 +55,14 @@ export const InstructorProjectDetailsPage = () => {
       setProject(data);
 
       if (data) {
-        const [taskList, memberList] = await Promise.all([
+        const [taskList, memberList, studentList] = await Promise.all([
           instructorService.getProjectTasks(selectedProjectId),
-          instructorService.getProjectMembers(selectedProjectId)
+          instructorService.getProjectMembers(selectedProjectId),
+          instructorService.getStudents()
         ]);
         setTasks(Array.isArray(taskList) ? taskList : []);
         setMembers(Array.isArray(memberList) ? memberList : []);
+        setAllStudents(Array.isArray(studentList) ? studentList : []);
       }
     } catch (err) {
       setError(err.message || 'Unable to retrieve project details.');
@@ -66,6 +74,33 @@ export const InstructorProjectDetailsPage = () => {
   useEffect(() => {
     fetchProjectData();
   }, [selectedProjectId]);
+
+  const handleEnrollStudent = async (e) => {
+    e.preventDefault();
+    if (!enrollStudentId) {
+      addToast('Please select a student to enroll.', 'error');
+      return;
+    }
+
+    setIsEnrolling(true);
+    try {
+      const res = await instructorService.assignProject(enrollStudentId, project.id);
+      addToast(res.message || 'Student enrolled in project successfully!', 'success');
+      setShowEnrollModal(false);
+      setEnrollStudentId('');
+      // Refetch project members & tasks
+      const [updatedMembers, updatedTasks] = await Promise.all([
+        instructorService.getProjectMembers(project.id),
+        instructorService.getProjectTasks(project.id)
+      ]);
+      setMembers(Array.isArray(updatedMembers) ? updatedMembers : []);
+      setTasks(Array.isArray(updatedTasks) ? updatedTasks : []);
+    } catch (err) {
+      addToast(err.message || 'Failed to enroll student.', 'error');
+    } finally {
+      setIsEnrolling(false);
+    }
+  };
 
   const handleOpenCreateTask = () => {
     setTaskModalData({
@@ -237,18 +272,30 @@ export const InstructorProjectDetailsPage = () => {
 
       {/* Enrolled Members Section */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-        <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-          <Users className="w-5 h-5 text-indigo-600" />
-          Enrolled Members ({members.length})
-        </h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <Users className="w-5 h-5 text-indigo-600" />
+              Enrolled Members ({members.length})
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">Students enrolled in this project will see it in their student dashboard and discussions.</p>
+          </div>
+          <button
+            onClick={() => setShowEnrollModal(true)}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-xs"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Enroll Student</span>
+          </button>
+        </div>
 
         {members.length === 0 ? (
           <EmptyState
             icon={Users}
             title="No Students Enrolled"
-            message="Assign students to this project from Manage Students page to allow task assignment."
-            actionLabel="Go to Manage Students"
-            onAction={() => navigateTo('student-contributions')}
+            message="Enroll registered students directly to this project so they can view it in their dashboard."
+            actionLabel="Enroll First Student"
+            onAction={() => setShowEnrollModal(true)}
           />
         ) : (
           <div className="divide-y divide-slate-100">
@@ -443,19 +490,25 @@ export const InstructorProjectDetailsPage = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Assign To Project Member</label>
+                <label className="block font-bold text-slate-700 mb-1">Assign To Student</label>
                 <select
                   value={taskModalData.assignedTo}
                   onChange={(e) => setTaskModalData({ ...taskModalData, assignedTo: e.target.value })}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
                 >
                   <option value="">Unassigned</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.email})
-                    </option>
-                  ))}
+                  {(allStudents.length > 0 ? allStudents : members).map((m) => {
+                    const isEnrolled = members.some((mem) => mem.id === m.id);
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.email}){isEnrolled ? ' • Enrolled' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Assigning a task will automatically enroll the student into this project.
+                </p>
               </div>
             </div>
 
@@ -493,7 +546,7 @@ export const InstructorProjectDetailsPage = () => {
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Select Project Student *</label>
+              <label className="block font-bold text-slate-700 mb-1">Select Student to Assign *</label>
               <select
                 value={assignStudentId}
                 onChange={(e) => setAssignStudentId(e.target.value)}
@@ -501,14 +554,17 @@ export const InstructorProjectDetailsPage = () => {
                 required
               >
                 <option value="">Select Student</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.email})
-                  </option>
-                ))}
+                {(allStudents.length > 0 ? allStudents : members).map((m) => {
+                  const isEnrolled = members.some((mem) => mem.id === m.id);
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.email}){isEnrolled ? ' • Enrolled' : ''}
+                    </option>
+                  );
+                })}
               </select>
               <p className="text-[10px] text-slate-400 mt-1">
-                Only students enrolled in {project.name} are shown.
+                Assigning a student will automatically add them to this project's enrolled members list.
               </p>
             </div>
 
@@ -525,6 +581,55 @@ export const InstructorProjectDetailsPage = () => {
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs"
               >
                 Assign Task
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {/* Enroll Student Directly to Project Modal */}
+      {showEnrollModal && (
+        <Modal
+          isOpen={showEnrollModal}
+          onClose={() => setShowEnrollModal(false)}
+          title={`Enroll Student to ${project.name}`}
+        >
+          <form onSubmit={handleEnrollStudent} className="space-y-4 text-xs">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Select Student to Enroll *</label>
+              <select
+                value={enrollStudentId}
+                onChange={(e) => setEnrollStudentId(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                required
+              >
+                <option value="">Choose a student...</option>
+                {allStudents
+                  .filter((s) => !members.some((m) => m.id === s.id))
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.email}) {s.studentId ? `• ID: ${s.studentId}` : ''}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Once enrolled, this project will appear in the student's dashboard, projects list, and discussion boards.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowEnrollModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isEnrolling}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs disabled:opacity-60"
+              >
+                {isEnrolling ? 'Enrolling...' : 'Enroll in Project'}
               </button>
             </div>
           </form>

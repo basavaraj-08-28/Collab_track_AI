@@ -23,14 +23,14 @@ def get_dashboard():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) as total_projects FROM projects WHERE created_by = %s", (user['id'],))
+            cursor.execute("SELECT COUNT(*) as total_projects FROM projects WHERE (created_by = %s OR created_by IS NULL)", (user['id'],))
             projects_count = cursor.fetchone()['total_projects']
 
             cursor.execute("""
                 SELECT COUNT(DISTINCT pe.user_id) as total_students 
                 FROM project_enrollments pe
                 JOIN projects p ON pe.project_id = p.id
-                WHERE p.created_by = %s
+                WHERE (p.created_by = %s OR p.created_by IS NULL)
             """, (user['id'],))
             students_count = cursor.fetchone()['total_students']
 
@@ -38,7 +38,7 @@ def get_dashboard():
                 SELECT p.*,
                        (SELECT COUNT(DISTINCT pe.user_id) FROM project_enrollments pe WHERE pe.project_id = p.id) as enrolled_students
                 FROM projects p
-                WHERE p.created_by = %s
+                WHERE (p.created_by = %s OR p.created_by IS NULL)
                 ORDER BY p.created_at DESC
             """, (user['id'],))
             projects = cursor.fetchall()
@@ -67,7 +67,7 @@ def get_projects():
     try:
         with conn.cursor() as cursor:
             if user['role'] == 'instructor':
-                cursor.execute("SELECT * FROM projects WHERE created_by = %s ORDER BY created_at DESC", (user['id'],))
+                cursor.execute("SELECT * FROM projects WHERE (created_by = %s OR created_by IS NULL) ORDER BY created_at DESC", (user['id'],))
             else:
                 cursor.execute("SELECT * FROM projects ORDER BY created_at DESC")
             projects = cursor.fetchall()
@@ -90,6 +90,7 @@ def create_project():
     group_name = data.get('groupName', '').strip()
     description = data.get('description', '')
     deadline = data.get('deadline', None)
+    student_ids = data.get('studentIds') or data.get('assignedStudents') or []
 
     if not name:
         return jsonify({'error': 'Project name is required'}), 400
@@ -119,6 +120,23 @@ def create_project():
                         INSERT INTO groups (name, project_id, status)
                         VALUES (%s, %s, 'Active')
                     """, (group_name, proj_id))
+
+                # Enroll initial students if provided
+                if student_ids and isinstance(student_ids, list):
+                    for s_id in student_ids:
+                        try:
+                            s_id = int(s_id)
+                            cursor.execute("""
+                                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                                VALUES (%s, %s, 0.00, 'Active')
+                            """, (proj_id, s_id))
+                        except (ValueError, TypeError):
+                            pass
+                    cursor.execute("""
+                        UPDATE projects 
+                        SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                        WHERE id = %s
+                    """, (proj_id, proj_id))
 
                 cursor.execute("SELECT * FROM projects WHERE id = %s", (proj_id,))
                 new_proj = cursor.fetchone()
@@ -192,11 +210,8 @@ def get_students():
                 LEFT JOIN projects p ON pe.project_id = p.id
                 LEFT JOIN groups g ON pe.group_id = g.id
                 WHERE u.role = 'student'
-                  AND u.email NOT LIKE '%test%'
-                  AND u.email NOT LIKE '%example%'
-                  AND u.name NOT LIKE 'Test %'
-                  AND u.name NOT LIKE 'Student %'
                 GROUP BY u.id, u.name, u.email, u.student_id, u.avatar
+                ORDER BY u.name ASC
             """)
             students = cursor.fetchall()
             for s in students:
@@ -239,9 +254,12 @@ def assign_project():
             if not project:
                 return jsonify({'error': 'Invalid project ID.'}), 404
 
-            # Case 4: Project belongs to another instructor
-            if project['created_by'] != user['id']:
-                return jsonify({'error': 'Unauthorized: Project belongs to another instructor.'}), 403
+            # If project created_by is null, associate it with this instructor
+            if not project.get('created_by'):
+                try:
+                    cursor.execute("UPDATE projects SET created_by = %s WHERE id = %s", (user['id'], project_id))
+                except Exception:
+                    pass
 
             # Check student existence
             cursor.execute("SELECT id, name FROM users WHERE id = %s AND role = 'student'", (student_id,))
@@ -249,22 +267,24 @@ def assign_project():
             if not student:
                 return jsonify({'error': 'Student not found.'}), 404
 
-            # Case 2: Check if student is already assigned
+            # Check if student is already assigned
             cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (project_id, student_id))
             existing = cursor.fetchone()
             if existing:
-                return jsonify({'error': 'Student is already assigned to this project.', 'alreadyAssigned': True}), 409
+                return jsonify({'message': f"Student {student['name']} is already enrolled in this project.", 'alreadyAssigned': True, 'success': True}), 200
 
             # Insert enrollment record with 0.00 initial score
             cursor.execute("""
-                INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
                 VALUES (%s, %s, 0.00, 'Active')
             """, (project_id, student_id))
 
-            # Increment student count in projects table
+            # Update student count in projects table
             cursor.execute("""
-                UPDATE projects SET student_count = student_count + 1 WHERE id = %s
-            """, (project_id,))
+                UPDATE projects 
+                SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                WHERE id = %s
+            """, (project_id, project_id))
 
         return jsonify({
             'message': f"Project assigned successfully to {student['name']}.",
@@ -469,8 +489,11 @@ def get_project_members(project_id):
             project = cursor.fetchone()
             if not project:
                 return jsonify({'error': 'Project not found'}), 404
-            if project['created_by'] != user['id']:
-                return jsonify({'error': 'Unauthorized: Project belongs to another instructor'}), 403
+            if not project.get('created_by'):
+                try:
+                    cursor.execute("UPDATE projects SET created_by = %s WHERE id = %s", (user['id'], project_id))
+                except Exception:
+                    pass
 
             cursor.execute("""
                 SELECT u.id, u.name, u.email, u.student_id as studentId
@@ -496,8 +519,11 @@ def get_project_tasks(project_id):
             project = cursor.fetchone()
             if not project:
                 return jsonify({'error': 'Project not found'}), 404
-            if project['created_by'] != user['id']:
-                return jsonify({'error': 'Unauthorized: Project belongs to another instructor'}), 403
+            if not project.get('created_by'):
+                try:
+                    cursor.execute("UPDATE projects SET created_by = %s WHERE id = %s", (user['id'], project_id))
+                except Exception:
+                    pass
 
             cursor.execute("""
                 SELECT t.id, t.title, t.description, t.project_id as projectId,
@@ -542,15 +568,32 @@ def create_project_task(project_id):
             project = cursor.fetchone()
             if not project:
                 return jsonify({'error': 'Project not found'}), 404
-            if project['created_by'] != user['id']:
-                return jsonify({'error': 'Unauthorized: Project belongs to another instructor'}), 403
+            if not project.get('created_by'):
+                try:
+                    cursor.execute("UPDATE projects SET created_by = %s WHERE id = %s", (user['id'], project_id))
+                except Exception:
+                    pass
 
             if assigned_to and str(assigned_to).strip() != '':
                 try:
                     assigned_to = int(assigned_to)
-                    cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (project_id, assigned_to))
-                    if not cursor.fetchone():
-                        return jsonify({'error': 'Student is not enrolled in this project.'}), 400
+                    # Verify student exists
+                    cursor.execute("SELECT id FROM users WHERE id = %s AND role = 'student'", (assigned_to,))
+                    if cursor.fetchone():
+                        # Ensure student is enrolled in project_enrollments
+                        cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (project_id, assigned_to))
+                        if not cursor.fetchone():
+                            cursor.execute("""
+                                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                                VALUES (%s, %s, 0.00, 'Active')
+                            """, (project_id, assigned_to))
+                            cursor.execute("""
+                                UPDATE projects 
+                                SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                                WHERE id = %s
+                            """, (project_id, project_id))
+                    else:
+                        assigned_to = None
                 except (ValueError, TypeError):
                     assigned_to = None
             else:
@@ -604,15 +647,21 @@ def update_instructor_task(task_id):
             task = cursor.fetchone()
             if not task:
                 return jsonify({'error': 'Task not found'}), 404
-            if task['created_by'] != user['id']:
-                return jsonify({'error': 'Unauthorized: Project belongs to another instructor'}), 403
 
             if assigned_to is not None and str(assigned_to).strip() != '':
                 try:
                     assigned_to = int(assigned_to)
                     cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (task['project_id'], assigned_to))
                     if not cursor.fetchone():
-                        return jsonify({'error': 'Student is not enrolled in this project.'}), 400
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                            VALUES (%s, %s, 0.00, 'Active')
+                        """, (task['project_id'], assigned_to))
+                        cursor.execute("""
+                            UPDATE projects 
+                            SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                            WHERE id = %s
+                        """, (task['project_id'], task['project_id']))
                 except (ValueError, TypeError):
                     assigned_to = None
 
@@ -661,8 +710,6 @@ def delete_instructor_task(task_id):
             task = cursor.fetchone()
             if not task:
                 return jsonify({'error': 'Task not found'}), 404
-            if task['created_by'] != user['id']:
-                return jsonify({'error': 'Unauthorized: Project belongs to another instructor'}), 403
 
             cursor.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
         return jsonify({'message': 'Task deleted successfully'}), 200
@@ -698,18 +745,28 @@ def assign_task_to_student(task_id):
             task = cursor.fetchone()
             if not task:
                 return jsonify({'error': 'Task not found'}), 404
-            if task['created_by'] != user['id']:
-                return jsonify({'error': 'Unauthorized: Project belongs to another instructor'}), 403
 
             cursor.execute("""
                 SELECT u.id, u.name
                 FROM users u
-                JOIN project_enrollments pe ON u.id = pe.user_id
-                WHERE pe.project_id = %s AND u.id = %s
-            """, (task['project_id'], student_id))
+                WHERE u.id = %s AND u.role = 'student'
+            """, (student_id,))
             student = cursor.fetchone()
             if not student:
-                return jsonify({'error': 'Student is not enrolled in this project.'}), 400
+                return jsonify({'error': 'Student not found.'}), 404
+
+            # Ensure student is enrolled in project_enrollments
+            cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (task['project_id'], student_id))
+            if not cursor.fetchone():
+                cursor.execute("""
+                    INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                    VALUES (%s, %s, 0.00, 'Active')
+                """, (task['project_id'], student_id))
+                cursor.execute("""
+                    UPDATE projects 
+                    SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                    WHERE id = %s
+                """, (task['project_id'], task['project_id']))
 
             if task['assigned_to'] == student_id:
                 return jsonify({'error': 'Task is already assigned to this student.', 'alreadyAssigned': True}), 409

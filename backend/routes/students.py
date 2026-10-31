@@ -159,10 +159,13 @@ def get_dashboard():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Fetch assigned projects count
+            # Fetch assigned projects count (enrolled or assigned to tasks in project)
             cursor.execute("""
-                SELECT COUNT(*) as count FROM project_enrollments WHERE user_id = %s
-            """, (user['id'],))
+                SELECT COUNT(DISTINCT p.id) as count 
+                FROM projects p
+                LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
+                WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
+            """, (user['id'], user['id'], user['id']))
             projects_count = cursor.fetchone()['count']
 
             # Fetch tasks count
@@ -188,15 +191,17 @@ def get_dashboard():
             for act in activities:
                 act['timestamp'] = safe_dt_str(act.get('timestamp'), '%Y-%m-%d %H:%M')
 
-            # Fetch assigned projects list
+            # Fetch assigned projects list (enrolled or assigned to tasks in project)
             cursor.execute("""
-                SELECT p.id, p.name, p.code, p.description, pe.collaboration_score, pe.status,
+                SELECT DISTINCT p.id, p.name, p.code, p.description, 
+                       COALESCE(pe.collaboration_score, 0.0) as collaboration_score, 
+                       COALESCE(pe.status, p.status, 'Active') as status,
                        pe.group_id, g.name as group_name
                 FROM projects p
-                JOIN project_enrollments pe ON p.id = pe.project_id
+                LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
                 LEFT JOIN groups g ON pe.group_id = g.id
-                WHERE pe.user_id = %s
-            """, (user['id'],))
+                WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
+            """, (user['id'], user['id'], user['id']))
             projects = cursor.fetchall()
             for p in projects:
                 # Compute authentic project collaboration score for current student
@@ -258,12 +263,14 @@ def get_projects():
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT p.id, p.name, p.code, p.description, p.status, p.deadline, pe.collaboration_score, pe.group_id, g.name as group_name
+                SELECT DISTINCT p.id, p.name, p.code, p.description, p.status, p.deadline, 
+                       COALESCE(pe.collaboration_score, 0.0) as collaboration_score, 
+                       pe.group_id, g.name as group_name
                 FROM projects p
-                JOIN project_enrollments pe ON p.id = pe.project_id
+                LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
                 LEFT JOIN groups g ON pe.group_id = g.id
-                WHERE pe.user_id = %s
-            """, (user['id'],))
+                WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
+            """, (user['id'], user['id'], user['id']))
             projects = cursor.fetchall()
             for p in projects:
                 if p.get('deadline'):
@@ -373,6 +380,7 @@ def get_tasks():
             cursor.execute("""
                 SELECT t.id, t.title, t.description, t.priority, t.status, 
                        t.due_date as dueDate, t.score_impact as scoreImpact, 
+                       t.project_id as projectId,
                        t.submission_file as submissionFile, t.submission_notes as submissionNotes, 
                        t.submitted_at as submittedAt, t.created_at as assignedDate,
                        p.name as project, p.name as projectName
@@ -577,12 +585,12 @@ def get_discussion_projects():
                 cursor.execute("SELECT id, name, code, description FROM projects WHERE created_by = %s ORDER BY created_at DESC", (user['id'],))
             else:
                 cursor.execute("""
-                    SELECT p.id, p.name, p.code, p.description
+                    SELECT DISTINCT p.id, p.name, p.code, p.description
                     FROM projects p
-                    JOIN project_enrollments pe ON p.id = pe.project_id
-                    WHERE pe.user_id = %s
+                    LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
+                    WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
                     ORDER BY p.created_at DESC
-                """, (user['id'],))
+                """, (user['id'], user['id'], user['id']))
             projects = cursor.fetchall()
         return jsonify(projects), 200
     finally:
