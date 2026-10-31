@@ -88,8 +88,9 @@ export const AuthProvider = ({ children }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const switchRole = (newRole) => {
+  const switchRole = async (newRole) => {
     setRole(newRole);
+    localStorage.setItem('collab_track_active_role', newRole);
     if (newRole === 'instructor') {
       setCurrentPage('instructor-dashboard');
     } else if (newRole === 'student') {
@@ -97,10 +98,23 @@ export const AuthProvider = ({ children }) => {
     } else {
       setCurrentPage('landing');
     }
+
+    try {
+      const res = await api.post('/auth/switch-role', { role: newRole });
+      if (res && res.token) {
+        localStorage.setItem('collab_track_auth_token', res.token);
+      }
+      if (res && res.user) {
+        setUser(res.user);
+      }
+    } catch (err) {
+      // Gracefully handle if offline or backend unavailable
+    }
   };
 
   const logout = () => {
     localStorage.removeItem('collab_track_auth_token');
+    localStorage.removeItem('collab_track_active_role');
     api.post('/auth/logout', {}).catch(() => {});
     setRole('public');
     setUser(null);

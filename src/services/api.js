@@ -10,9 +10,11 @@ export const API_BASE_URL = cleanRawUrl
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('collab_track_auth_token');
+  const activeRole = localStorage.getItem('collab_track_active_role');
   return {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(activeRole ? { 'X-Active-Role': activeRole } : {})
   };
 };
 

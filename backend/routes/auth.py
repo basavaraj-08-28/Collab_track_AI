@@ -186,3 +186,42 @@ def update_profile():
         return jsonify({'message': 'Profile updated', 'user': user_data}), 200
     finally:
         conn.close()
+
+@auth_bp.route('/switch-role', methods=['POST'])
+def switch_role():
+    user = get_current_user_from_request()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json() or {}
+    new_role = data.get('role', 'student').lower()
+    if new_role not in ['student', 'instructor']:
+        return jsonify({'error': 'Invalid role'}), 400
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user['id']))
+            cursor.execute("SELECT id, name, email, role, student_id, instructor_id, title, department, avatar FROM users WHERE id = %s", (user['id'],))
+            updated_user = cursor.fetchone()
+
+        new_token = generate_token(updated_user['id'], updated_user['role'])
+        user_data = {
+            'id': updated_user['id'],
+            'name': updated_user['name'],
+            'email': updated_user['email'],
+            'role': updated_user['role'],
+            'studentId': updated_user['student_id'],
+            'instructorId': updated_user['instructor_id'],
+            'title': updated_user['title'],
+            'department': updated_user['department'],
+            'avatar': updated_user['avatar']
+        }
+        return jsonify({
+            'message': f'Role switched to {new_role}',
+            'token': new_token,
+            'user': user_data
+        }), 200
+    finally:
+        conn.close()
+
