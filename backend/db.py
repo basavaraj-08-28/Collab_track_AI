@@ -74,11 +74,19 @@ class SQLiteConnWrapper:
     def commit(self):
         self.conn.commit()
 
+_turso_session = None
+
+def get_turso_session():
+    global _turso_session
+    if _turso_session is None:
+        import requests
+        _turso_session = requests.Session()
+    return _turso_session
+
 class TursoCursorWrapper:
     """Cursor wrapper for Turso / libSQL HTTP pipeline API when hosted SQLite is configured."""
     def __init__(self, db_url, auth_token):
-        import requests
-        self.requests = requests
+        self.session = get_turso_session()
         self.db_url = db_url.replace('libsql://', 'https://').rstrip('/')
         self.auth_token = auth_token
         self.lastrowid = None
@@ -132,7 +140,7 @@ class TursoCursorWrapper:
             "Content-Type": "application/json"
         }
 
-        res = self.requests.post(f"{self.db_url}/v2/pipeline", json=payload, headers=headers, timeout=10)
+        res = self.session.post(f"{self.db_url}/v2/pipeline", json=payload, headers=headers, timeout=10)
         res.raise_for_status()
         data = res.json()
         results = data.get("results", [])
@@ -208,10 +216,32 @@ def get_db_connection(use_db=True):
 
     return SQLiteConnWrapper(sqlite_conn)
 
-def init_db():
+_db_initialized = False
+
+def init_db(force=False):
     """Ensure SQLite database and tables are initialized in collab_track_ai.db or hosted Turso."""
+    global _db_initialized
+    if _db_initialized and not force:
+        return
+
     try:
         conn = get_db_connection()
+        # Fast path: skip DDL migration if users table is already initialized
+        if not force:
+            table_exists = False
+            try:
+                with conn.cursor() as check_cursor:
+                    check_cursor.execute("SELECT 1 FROM users LIMIT 1;")
+                    check_cursor.fetchone()
+                    table_exists = True
+            except Exception:
+                table_exists = False
+
+            if table_exists:
+                conn.close()
+                _db_initialized = True
+                return
+
         with conn.cursor() as cursor:
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -398,6 +428,7 @@ def init_db():
             """)
 
         conn.close()
+        _db_initialized = True
         target_name = Config.TURSO_DATABASE_URL if Config.TURSO_DATABASE_URL else Config.DATABASE_PATH
         print(f"[OK] SQLite Database initialized successfully at '{target_name}'.")
     except Exception as e:

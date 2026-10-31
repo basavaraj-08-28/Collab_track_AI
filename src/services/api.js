@@ -16,15 +16,23 @@ const getAuthHeaders = () => {
   };
 };
 
-async function handleRequest(requestFn) {
+async function handleRequest(requestFn, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let response;
   try {
-    response = await requestFn();
+    response = await requestFn(controller.signal);
   } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Server request timed out. The backend is waking up, please retry in a moment.');
+    }
     if (err.message && (err.message.includes('Failed to fetch') || err.name === 'TypeError')) {
       throw new Error('Unable to connect to backend server. Please verify network connection or backend availability.');
     }
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!response.ok) {
@@ -38,39 +46,43 @@ async function handleRequest(requestFn) {
 
 export const api = {
   async get(endpoint) {
-    return handleRequest(() =>
+    return handleRequest((signal) =>
       fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'GET',
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        signal
       })
     );
   },
 
   async post(endpoint, body) {
-    return handleRequest(() =>
+    return handleRequest((signal) =>
       fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(body || {})
+        body: JSON.stringify(body || {}),
+        signal
       })
     );
   },
 
   async put(endpoint, body) {
-    return handleRequest(() =>
+    return handleRequest((signal) =>
       fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(body || {})
+        body: JSON.stringify(body || {}),
+        signal
       })
     );
   },
 
   async delete(endpoint) {
-    return handleRequest(() =>
+    return handleRequest((signal) =>
       fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'DELETE',
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        signal
       })
     );
   }

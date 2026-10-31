@@ -43,7 +43,7 @@ export const MyTasksPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await studentService.getTasks(filter);
+      const data = await studentService.getTasks();
       setTasks(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message || 'Unable to retrieve assigned tasks.');
@@ -54,7 +54,12 @@ export const MyTasksPage = () => {
 
   useEffect(() => {
     fetchTasks();
-  }, [filter]);
+  }, []);
+
+  const filteredTasks = tasks.filter((task) => {
+    if (filter === 'All') return true;
+    return (task.status || '').toLowerCase() === filter.toLowerCase();
+  });
 
   const handleOpenSubmitModal = (task) => {
     setSelectedTask(task);
@@ -235,7 +240,7 @@ export const MyTasksPage = () => {
 
         {/* Filter Pills */}
         <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1 border border-slate-200 text-xs font-semibold overflow-x-auto">
-          {['All', 'Pending', 'In Progress', 'Completed', 'Overdue'].map((status) => (
+          {['All', 'Pending', 'In Progress', 'Completed'].map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
@@ -251,7 +256,7 @@ export const MyTasksPage = () => {
         </div>
       </div>
 
-      {tasks.length === 0 ? (
+      {filteredTasks.length === 0 ? (
         <EmptyState
           icon={CheckSquare}
           title="No Tasks Assigned"
@@ -261,7 +266,7 @@ export const MyTasksPage = () => {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tasks.map((task) => {
+          {filteredTasks.map((task) => {
             const fileBadgeInfo = task.submissionFile ? getFileIconBadge(task.submissionFile) : null;
             const isCompleted = task.status === 'Completed';
 
@@ -364,9 +369,10 @@ export const MyTasksPage = () => {
                     >
                       <option value="Pending">Pending</option>
                       <option value="In Progress">In Progress</option>
-                      <option value="In Review">In Review</option>
                       <option value="Completed">Completed</option>
-                      <option value="Overdue">Overdue</option>
+                      {task.status === 'Overdue' && (
+                        <option value="Overdue" disabled>Overdue</option>
+                      )}
                     </select>
                   </div>
 

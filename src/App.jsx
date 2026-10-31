@@ -1,42 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import Navbar from './components/common/Navbar';
 import Sidebar from './components/common/Sidebar';
 
-// Public Pages
+// Public Pages: Eager load LandingPage for instant initial paint
 import LandingPage from './pages/public/LandingPage';
-import LoginPage from './pages/public/LoginPage';
-import RegisterPage from './pages/public/RegisterPage';
-import ForgotPasswordPage from './pages/public/ForgotPasswordPage';
+const LoginPage = lazy(() => import('./pages/public/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/public/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/public/ForgotPasswordPage'));
 
-// Student Pages
-import StudentDashboard from './pages/student/StudentDashboard';
-import MyProjectsPage from './pages/student/MyProjectsPage';
-import ProjectDetailsPage from './pages/student/ProjectDetailsPage';
-import MyTasksPage from './pages/student/MyTasksPage';
-import CollaborationActivityPage from './pages/student/CollaborationActivityPage';
-import MessagesDiscussionPage from './pages/student/MessagesDiscussionPage';
-import MyCollaborationScorePage from './pages/student/MyCollaborationScorePage';
-import PerformanceAnalyticsPage from './pages/student/PerformanceAnalyticsPage';
-import AIInsightsPage from './pages/student/AIInsightsPage';
-import StudentProfilePage from './pages/student/StudentProfilePage';
-import StudentNotificationsPage from './pages/student/StudentNotificationsPage';
+// Student Pages (Lazy Loaded on demand)
+const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'));
+const MyProjectsPage = lazy(() => import('./pages/student/MyProjectsPage'));
+const ProjectDetailsPage = lazy(() => import('./pages/student/ProjectDetailsPage'));
+const MyTasksPage = lazy(() => import('./pages/student/MyTasksPage'));
+const MessagesDiscussionPage = lazy(() => import('./pages/student/MessagesDiscussionPage'));
+const PerformanceAnalyticsPage = lazy(() => import('./pages/student/PerformanceAnalyticsPage'));
+const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage'));
 
-// Instructor Pages
-import InstructorDashboard from './pages/instructor/InstructorDashboard';
-import CreateProjectPage from './pages/instructor/CreateProjectPage';
-import ManageProjectsPage from './pages/instructor/ManageProjectsPage';
-import InstructorProjectDetailsPage from './pages/instructor/InstructorProjectDetailsPage';
-import StudentContributionsPage from './pages/instructor/StudentContributionsPage';
-import CollaborationAnalyticsPage from './pages/instructor/CollaborationAnalyticsPage';
-import StudentPerformancePage from './pages/instructor/StudentPerformancePage';
-import GroupComparisonPage from './pages/instructor/GroupComparisonPage';
-import ReportsPage from './pages/instructor/ReportsPage';
-import InstructorProfilePage from './pages/instructor/InstructorProfilePage';
-import InstructorNotificationsPage from './pages/instructor/InstructorNotificationsPage';
+// Instructor Pages (Lazy Loaded on demand)
+const InstructorDashboard = lazy(() => import('./pages/instructor/InstructorDashboard'));
+const CreateProjectPage = lazy(() => import('./pages/instructor/CreateProjectPage'));
+const ManageProjectsPage = lazy(() => import('./pages/instructor/ManageProjectsPage'));
+const InstructorProjectDetailsPage = lazy(() => import('./pages/instructor/InstructorProjectDetailsPage'));
+const StudentContributionsPage = lazy(() => import('./pages/instructor/StudentContributionsPage'));
+const CollaborationAnalyticsPage = lazy(() => import('./pages/instructor/CollaborationAnalyticsPage'));
+const StudentPerformancePage = lazy(() => import('./pages/instructor/StudentPerformancePage'));
+const GroupComparisonPage = lazy(() => import('./pages/instructor/GroupComparisonPage'));
+const ReportsPage = lazy(() => import('./pages/instructor/ReportsPage'));
+const InstructorProfilePage = lazy(() => import('./pages/instructor/InstructorProfilePage'));
+const InstructorNotificationsPage = lazy(() => import('./pages/instructor/InstructorNotificationsPage'));
 
-import StudentAIChatbot from './components/AI/StudentAIChatbot';
+const StudentAIChatbot = lazy(() => import('./components/AI/StudentAIChatbot'));
+
+const PageFallback = () => (
+  <div className="min-h-[40vh] flex flex-col items-center justify-center p-8 space-y-3">
+    <div className="w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+    <span className="text-xs font-semibold text-slate-400">Loading view...</span>
+  </div>
+);
 
 const AppContent = () => {
   const { role, currentPage } = useAuth();
@@ -102,7 +105,13 @@ const AppContent = () => {
   const isPublicView = ['landing', 'login', 'register', 'forgot-password'].includes(currentPage);
 
   if (isPublicView) {
-    return <div className="min-h-screen bg-slate-50">{renderPage()}</div>;
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Suspense fallback={<PageFallback />}>
+          {renderPage()}
+        </Suspense>
+      </div>
+    );
   }
 
   return (
@@ -111,12 +120,18 @@ const AppContent = () => {
       <div className="flex flex-1 relative">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <main className="flex-1 lg:ml-64 min-h-[calc(100vh-4rem)] pb-12 overflow-x-hidden">
-          {renderPage()}
+          <Suspense fallback={<PageFallback />}>
+            {renderPage()}
+          </Suspense>
         </main>
       </div>
 
       {/* Student AI Assistant Floating Chatbot */}
-      {role === 'student' && <StudentAIChatbot />}
+      {role === 'student' && (
+        <Suspense fallback={null}>
+          <StudentAIChatbot />
+        </Suspense>
+      )}
     </div>
   );
 };
