@@ -15,16 +15,40 @@ from routes.instructor import instructor_bp
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Enable CORS for localhost frontend ports
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Register blueprints
+class VercelPathMiddleware:
+    """Ensure WSGI PATH_INFO routes correctly on Vercel serverless functions."""
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        path = environ.get('PATH_INFO', '')
+        if path.startswith('/api/index.py'):
+            environ['PATH_INFO'] = path.replace('/api/index.py', '/api', 1)
+        elif path.startswith('/api/index'):
+            environ['PATH_INFO'] = path.replace('/api/index', '/api', 1)
+        elif not path.startswith('/api') and path != '/':
+            environ['PATH_INFO'] = '/api' + path
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = VercelPathMiddleware(app.wsgi_app)
+
+# Register blueprints under /api prefix and direct prefix for Vercel compatibility
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(students_bp, url_prefix='/api/student')
 app.register_blueprint(groups_bp, url_prefix='/api/groups')
 app.register_blueprint(activities_bp, url_prefix='/api/activities')
 app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
 app.register_blueprint(instructor_bp, url_prefix='/api/instructor')
+
+app.register_blueprint(auth_bp, url_prefix='/auth', name='auth_alt')
+app.register_blueprint(students_bp, url_prefix='/student', name='students_alt')
+app.register_blueprint(groups_bp, url_prefix='/groups', name='groups_alt')
+app.register_blueprint(activities_bp, url_prefix='/activities', name='activities_alt')
+app.register_blueprint(analytics_bp, url_prefix='/analytics', name='analytics_alt')
+app.register_blueprint(instructor_bp, url_prefix='/instructor', name='instructor_alt')
 
 # Initialize DB at module load time so tables exist on Vercel cold starts
 try:
@@ -33,6 +57,7 @@ except Exception as _init_err:
     print(f"[WARN] init_db on import failed: {_init_err}")
 
 @app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health_check():
     from config import Config as _Cfg
     db_info = _Cfg.TURSO_DATABASE_URL if _Cfg.TURSO_DATABASE_URL else os.path.basename(_Cfg.DATABASE_PATH)

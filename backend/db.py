@@ -87,7 +87,12 @@ class TursoCursorWrapper:
     """Cursor wrapper for Turso / libSQL HTTP pipeline API when hosted SQLite is configured."""
     def __init__(self, db_url, auth_token):
         self.session = get_turso_session()
-        self.db_url = db_url.replace('libsql://', 'https://').rstrip('/')
+        url = (db_url or '').strip()
+        if url.startswith('libsql://'):
+            url = url.replace('libsql://', 'https://', 1)
+        elif not url.startswith('http://') and not url.startswith('https://'):
+            url = f"https://{url}"
+        self.db_url = url.rstrip('/')
         self.auth_token = auth_token
         self.lastrowid = None
         self._results = []
@@ -115,6 +120,8 @@ class TursoCursorWrapper:
         for p in cleaned_params:
             if p is None:
                 args.append({"type": "null"})
+            elif isinstance(p, bool):
+                args.append({"type": "integer", "value": "1" if p else "0"})
             elif isinstance(p, int):
                 args.append({"type": "integer", "value": str(p)})
             elif isinstance(p, float):
@@ -140,13 +147,16 @@ class TursoCursorWrapper:
             "Content-Type": "application/json"
         }
 
-        res = self.session.post(f"{self.db_url}/v2/pipeline", json=payload, headers=headers, timeout=10)
+        res = self.session.post(f"{self.db_url}/v2/pipeline", json=payload, headers=headers, timeout=15)
         res.raise_for_status()
         data = res.json()
         results = data.get("results", [])
 
         self._results = []
-        if results and results[0].get("type") == "ok":
+        if results and results[0].get("type") == "error":
+            err_msg = results[0].get("response", {}).get("message") or results[0].get("error") or str(results[0])
+            raise Exception(f"Turso Error: {err_msg}")
+        elif results and results[0].get("type") == "ok":
             resp_result = results[0].get("response", {}).get("result", {})
             cols = [c.get("name") for c in resp_result.get("cols", [])]
             rows = resp_result.get("rows", [])
@@ -193,6 +203,9 @@ class TursoConnWrapper:
     def commit(self):
         pass
 
+    def rollback(self):
+        pass
+
 def get_db_connection(use_db=True):
     """Create and return a SQLite database connection for Collab Track AI."""
     # Check if hosted Turso SQLite is configured for cloud deployment
@@ -203,6 +216,17 @@ def get_db_connection(use_db=True):
     db_dir = os.path.dirname(db_path)
     if db_dir and not os.path.exists(db_dir):
         os.makedirs(db_dir, exist_ok=True)
+
+    # In serverless environments (Vercel), copy bundled seed database to /tmp if it doesn't exist yet
+    if Config.is_serverless and not os.path.exists(db_path):
+        bundled_seed = os.path.join(Config.BASE_DIR, 'collab_track_ai.db')
+        if os.path.exists(bundled_seed):
+            try:
+                import shutil
+                shutil.copy2(bundled_seed, db_path)
+                print(f"[OK] Seeded serverless database at '{db_path}' from bundled template.")
+            except Exception as e:
+                print(f"[WARN] Could not seed database: {e}")
 
     sqlite_conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
     sqlite_conn.row_factory = sqlite3.Row
@@ -427,6 +451,46 @@ def init_db(force=False):
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             """)
+
+            # If database is completely empty (e.g. brand new Turso database), seed baseline accounts
+            try:
+                cursor.execute("SELECT COUNT(*) as count FROM users")
+                user_cnt_row = cursor.fetchone()
+                user_count = (user_cnt_row.get('count') if user_cnt_row else 0) or 0
+                if user_count == 0:
+                    from werkzeug.security import generate_password_hash
+                    default_pwd = generate_password_hash('password123')
+                    users_seed = [
+                        (2, 'BYN', 'byn12342@gmail.com', 'instructor', 'STD-2026-BYN', 'FAC-2026-BYN', 'Computer Science'),
+                        (3, 'Priyam', 'priyamhm123@gmail.com', 'student', 'STD-2026-PRI', None, 'Computer Science'),
+                        (5, 'Professor Smith', 'profsmith@university.edu', 'instructor', None, 'FAC-2026-PRO', 'Computer Science'),
+                        (6, 'Nuthan', 'nuthan@gmail.com', 'student', '1sz23cs041', None, 'Computer Science')
+                    ]
+                    for uid, name, email, role, std_id, inst_id, dept in users_seed:
+                        cursor.execute("""
+                            INSERT INTO users (id, name, email, password_hash, role, student_id, instructor_id, department)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (uid, name, email, default_pwd, role, std_id, inst_id, dept))
+
+                    cursor.execute("""
+                        INSERT INTO projects (id, name, code, description, status, student_count, deadline, created_by)
+                        VALUES (5, 'collab', 'CS701', 'This project mainly depends on student contribution based on tasks', 'Active', 2, '2026-12-31', 2)
+                    """)
+                    cursor.execute("""
+                        INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                        VALUES (5, 2, 16.0, 'Active')
+                    """)
+                    cursor.execute("""
+                        INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                        VALUES (5, 3, 0.0, 'Active')
+                    """)
+                    cursor.execute("""
+                        INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                        VALUES (5, 6, 0.0, 'Active')
+                    """)
+                    print("[OK] Seeded initial baseline accounts into empty database.")
+            except Exception as _seed_err:
+                print(f"[WARN] Automatic baseline seeding notice: {_seed_err}")
 
         conn.close()
         _db_initialized = True

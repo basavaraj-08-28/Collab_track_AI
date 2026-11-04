@@ -27,9 +27,10 @@ __pycache__/
 *.pyd
 
 # Local databases
-*.db
 *.sqlite
 *.sqlite3
+# Allow seed database template to deploy with Vercel serverless function
+!backend/collab_track_ai.db
 
 # Editor directories and files
 .vscode/*
