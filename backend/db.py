@@ -204,13 +204,14 @@ def get_db_connection(use_db=True):
     if db_dir and not os.path.exists(db_dir):
         os.makedirs(db_dir, exist_ok=True)
 
-    sqlite_conn = sqlite3.connect(db_path, check_same_thread=False, timeout=10.0)
+    sqlite_conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
     sqlite_conn.row_factory = sqlite3.Row
     sqlite_conn.isolation_level = None  # Autocommit mode
 
     try:
         sqlite_conn.execute("PRAGMA journal_mode=WAL;")
         sqlite_conn.execute("PRAGMA foreign_keys=ON;")
+        sqlite_conn.execute("PRAGMA busy_timeout=30000;")
     except Exception:
         pass
 

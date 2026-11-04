@@ -27,6 +27,10 @@ def get_current_user_from_request():
             cursor.execute("SELECT id, name, email, role, student_id, instructor_id, title, department, avatar FROM users WHERE id = %s", (data['user_id'],))
             user = cursor.fetchone()
         conn.close()
+        if user:
+            active_role = request.headers.get('X-Active-Role')
+            if active_role and active_role.lower() in ['student', 'instructor']:
+                user['role'] = active_role.lower()
         return user
     except Exception:
         return None
@@ -171,6 +175,7 @@ def update_profile():
 
             cursor.execute("SELECT id, name, email, role, student_id, instructor_id, title, department, avatar FROM users WHERE id = %s", (user['id'],))
             updated_user = cursor.fetchone()
+        conn.commit()
 
         user_data = {
             'id': updated_user['id'],
@@ -204,6 +209,7 @@ def switch_role():
             cursor.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user['id']))
             cursor.execute("SELECT id, name, email, role, student_id, instructor_id, title, department, avatar FROM users WHERE id = %s", (user['id'],))
             updated_user = cursor.fetchone()
+        conn.commit()
 
         new_token = generate_token(updated_user['id'], updated_user['role'])
         user_data = {

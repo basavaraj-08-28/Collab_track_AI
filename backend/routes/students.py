@@ -121,17 +121,6 @@ def compute_student_collaboration_score(cursor, user_id, project_id=None):
         )
         overall_score = round(min(100.0, max(0.0, raw_overall)), 1)
 
-    # Update database cache in project_enrollments if project_id is provided
-    if project_id:
-        try:
-            cursor.execute("""
-                UPDATE project_enrollments 
-                SET collaboration_score = %s 
-                WHERE project_id = %s AND user_id = %s
-            """, (overall_score, project_id, user_id))
-        except Exception:
-            pass
-
     return {
         'overall': overall_score,
         'breakdown': {
@@ -166,7 +155,8 @@ def get_dashboard():
                 LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
                 WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
             """, (user['id'], user['id'], user['id']))
-            projects_count = cursor.fetchone()['count']
+            p_res = cursor.fetchone()
+            projects_count = (p_res.get('count') if p_res else 0) or 0
 
             # Fetch tasks count
             cursor.execute("""
@@ -176,7 +166,7 @@ def get_dashboard():
                     SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as pending_tasks
                 FROM tasks WHERE assigned_to = %s
             """, (user['id'],))
-            task_stats = cursor.fetchone()
+            task_stats = cursor.fetchone() or {}
 
             # Dynamic authentic performance collaboration score
             user_score_data = compute_student_collaboration_score(cursor, user['id'])
@@ -187,7 +177,7 @@ def get_dashboard():
                 SELECT id, type, description, score_change, created_at as timestamp 
                 FROM activities WHERE user_id = %s ORDER BY created_at DESC LIMIT 5
             """, (user['id'],))
-            activities = cursor.fetchall()
+            activities = cursor.fetchall() or []
             for act in activities:
                 act['timestamp'] = safe_dt_str(act.get('timestamp'), '%Y-%m-%d %H:%M')
 
@@ -204,7 +194,7 @@ def get_dashboard():
                 WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
                 ORDER BY p.created_at DESC
             """, (user['id'], user['id'], user['id']))
-            projects = cursor.fetchall()
+            projects = cursor.fetchall() or []
             for p in projects:
                 # Compute authentic project collaboration score for current student
                 proj_score_data = compute_student_collaboration_score(cursor, user['id'], p['id'])
@@ -218,10 +208,9 @@ def get_dashboard():
                     JOIN users u ON pe2.user_id = u.id
                     WHERE pe2.project_id = %s
                 """, (p['id'],))
-                p['members'] = cursor.fetchall()
+                p['members'] = cursor.fetchall() or []
                 for m in p['members']:
-                    m_score = compute_student_collaboration_score(cursor, m['id'], p['id'])
-                    m['score'] = m_score['overall']
+                    m['score'] = float(m.get('score') or 0.0)
 
                 # Task metrics
                 cursor.execute("""
@@ -230,28 +219,33 @@ def get_dashboard():
                     FROM tasks
                     WHERE project_id = %s
                 """, (p['id'],))
-                t_stats = cursor.fetchone()
-                p['totalTasks'] = (t_stats['total'] if t_stats else 0) or 0
-                p['tasksCompleted'] = (t_stats['completed'] if t_stats else 0) or 0
+                t_stats = cursor.fetchone() or {}
+                p['totalTasks'] = (t_stats.get('total') or 0)
+                p['tasksCompleted'] = (t_stats.get('completed') or 0)
                 p['progress'] = int((p['tasksCompleted'] / p['totalTasks'] * 100)) if p['totalTasks'] > 0 else 0
                 p['group'] = p.get('group_name') or 'Group'
 
         return jsonify({
             'user': user,
+            'totalTasks': task_stats.get('total_tasks') or 0,
+            'tasksCompleted': task_stats.get('completed_tasks') or 0,
             'stats': {
                 'projectsCount': projects_count,
-                'totalTasks': task_stats['total_tasks'] or 0,
-                'completedTasks': task_stats['completed_tasks'] or 0,
-                'pendingTasks': task_stats['pending_tasks'] or 0,
+                'totalTasks': task_stats.get('total_tasks') or 0,
+                'completedTasks': task_stats.get('completed_tasks') or 0,
+                'pendingTasks': task_stats.get('pending_tasks') or 0,
                 'collaborationScore': avg_score
             },
             'projects': projects,
+            'activities': activities,
             'recentActivities': activities,
             'score': {
                 'overall': user_score_data['overall'],
                 'breakdown': user_score_data['breakdown']
             }
         }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load dashboard: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -275,7 +269,7 @@ def get_projects():
                 WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
                 ORDER BY p.created_at DESC
             """, (user['id'], user['id'], user['id']))
-            projects = cursor.fetchall()
+            projects = cursor.fetchall() or []
             for p in projects:
                 if p.get('deadline'):
                     p['deadline'] = safe_dt_str(p['deadline'], '%Y-%m-%d')
@@ -292,10 +286,9 @@ def get_projects():
                     JOIN users u ON pe2.user_id = u.id
                     WHERE pe2.project_id = %s
                 """, (p['id'],))
-                p['members'] = cursor.fetchall()
+                p['members'] = cursor.fetchall() or []
                 for m in p['members']:
-                    m_score = compute_student_collaboration_score(cursor, m['id'], p['id'])
-                    m['score'] = m_score['overall']
+                    m['score'] = float(m.get('score') or 0.0)
 
                 # Fetch task metrics
                 cursor.execute("""
@@ -304,13 +297,15 @@ def get_projects():
                     FROM tasks
                     WHERE project_id = %s
                 """, (p['id'],))
-                t_stats = cursor.fetchone()
-                p['totalTasks'] = (t_stats['total'] if t_stats else 0) or 0
-                p['tasksCompleted'] = (t_stats['completed'] if t_stats else 0) or 0
+                t_stats = cursor.fetchone() or {}
+                p['totalTasks'] = (t_stats.get('total') or 0)
+                p['tasksCompleted'] = (t_stats.get('completed') or 0)
                 p['progress'] = int((p['tasksCompleted'] / p['totalTasks'] * 100)) if p['totalTasks'] > 0 else 0
                 p['group'] = p.get('group_name') or 'Group'
 
         return jsonify(projects), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load projects: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -351,10 +346,9 @@ def get_project_by_id(project_id):
                 JOIN users u ON pe2.user_id = u.id
                 WHERE pe2.project_id = %s
             """, (project_id,))
-            proj['members'] = cursor.fetchall()
+            proj['members'] = cursor.fetchall() or []
             for m in proj['members']:
-                m_score = compute_student_collaboration_score(cursor, m['id'], project_id)
-                m['score'] = m_score['overall']
+                m['score'] = float(m.get('score') or 0.0)
 
             # Fetch task metrics
             cursor.execute("""
@@ -363,13 +357,15 @@ def get_project_by_id(project_id):
                 FROM tasks
                 WHERE project_id = %s
             """, (project_id,))
-            t_stats = cursor.fetchone()
-            proj['totalTasks'] = t_stats['total'] or 0
-            proj['tasksCompleted'] = t_stats['completed'] or 0
+            t_stats = cursor.fetchone() or {}
+            proj['totalTasks'] = (t_stats.get('total') or 0)
+            proj['tasksCompleted'] = (t_stats.get('completed') or 0)
             proj['progress'] = int((proj['tasksCompleted'] / proj['totalTasks'] * 100)) if proj['totalTasks'] > 0 else 0
             proj['group'] = proj.get('group_name') or 'Group'
 
         return jsonify(proj), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load project details: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -394,7 +390,7 @@ def get_tasks():
                 WHERE t.assigned_to = %s
                 ORDER BY t.created_at DESC
             """, (user['id'],))
-            tasks = cursor.fetchall()
+            tasks = cursor.fetchall() or []
             for t in tasks:
                 if t.get('dueDate'):
                     t['dueDate'] = safe_dt_str(t['dueDate'], '%Y-%m-%d')
@@ -403,6 +399,8 @@ def get_tasks():
                 if t.get('submittedAt'):
                     t['submittedAt'] = safe_dt_str(t['submittedAt'], '%Y-%m-%d %H:%M')
         return jsonify(tasks), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load tasks: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -437,8 +435,10 @@ def update_task_status(task_id):
                     INSERT INTO activities (user_id, project_id, type, description, score_change)
                     VALUES (%s, %s, 'Task Update', %s, %s)
                 """, (user['id'], existing_task.get('project_id'), f"Updated sprint task '{task_title}' status to '{new_status}'", score_gain))
-
+        conn.commit()
         return jsonify(updated), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to update task: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -481,13 +481,15 @@ def submit_task():
                 INSERT INTO activities (user_id, project_id, type, description, score_change)
                 VALUES (%s, %s, %s, %s, 5)
             """, (user['id'], project_id, act_type, f"Submitted deliverable for '{task_title}'{file_desc}{note_summary}"))
-
+        conn.commit()
         return jsonify({
             'message': 'Task submitted successfully', 
             'taskId': task_id, 
             'submissionFile': submission_file,
             'status': 'Completed'
         }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to submit task: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -567,6 +569,8 @@ def get_activity():
                 })
 
         return jsonify(activities), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load activities: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -598,6 +602,8 @@ def get_discussion_projects():
                 """, (user['id'], user['id'], user['id']))
             projects = cursor.fetchall()
         return jsonify(projects), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load discussion projects: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -686,6 +692,8 @@ def get_project_discussion(project_id):
                 'onlineMembers': online_count
             }
         }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load project discussion: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -716,6 +724,8 @@ def project_discussion_heartbeat(project_id):
             touch_user_activity(cursor, user['id'])
 
             return jsonify({'status': 'ok', 'projectId': project_id, 'isOnline': True}), 200
+    except Exception as e:
+        return jsonify({'error': f'Heartbeat error: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -776,6 +786,7 @@ def post_project_discussion(project_id):
                     INSERT INTO activities (user_id, project_id, type, description, score_change)
                     VALUES (%s, %s, %s, %s, 2)
                 """, (user['id'], project_id, act_type, act_desc))
+            conn.commit()
 
             if new_msg:
                 if new_msg.get('timestamp'):
@@ -783,6 +794,8 @@ def post_project_discussion(project_id):
                 new_msg['senderRole'] = 'Instructor' if new_msg.get('senderRole') == 'instructor' else 'Student'
 
         return jsonify(new_msg), 201
+    except Exception as e:
+        return jsonify({'error': f'Failed to post message: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -804,11 +817,13 @@ def get_discussions():
                 JOIN users u ON d.sender_id = u.id
                 ORDER BY d.created_at ASC
             """)
-            messages = cursor.fetchall()
+            messages = cursor.fetchall() or []
             for m in messages:
                 m['timestamp'] = safe_dt_str(m.get('timestamp'), '%I:%M %p')
                 m['senderRole'] = 'Instructor' if m.get('senderRole') == 'instructor' else 'Student'
         return jsonify(messages), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load discussions: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -849,7 +864,10 @@ def post_discussion():
             if new_msg:
                 new_msg['timestamp'] = safe_dt_str(new_msg.get('timestamp'), '%I:%M %p')
                 new_msg['senderRole'] = 'Instructor' if new_msg.get('senderRole') == 'instructor' else 'Student'
+        conn.commit()
         return jsonify(new_msg), 201
+    except Exception as e:
+        return jsonify({'error': f'Failed to post discussion: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -942,6 +960,8 @@ def get_score():
             'strengths': strengths,
             'improvements': improvements
         }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to compute score: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -1124,6 +1144,8 @@ def get_analytics():
                 'analysisNarrative': narrative
             }
         }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load analytics: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -1149,6 +1171,8 @@ def get_ai_insights():
                 'score': float(insight['score'])
             }
         }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load AI insights: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -1167,6 +1191,7 @@ def analyze_ai_insights():
                 VALUES (%s, 88.50, 'A', %s)
                 ON DUPLICATE KEY UPDATE score = 88.50, suggested_grade = 'A', narrative = %s
             """, (user['id'], narrative, narrative))
+        conn.commit()
 
         return jsonify({
             'insights': {
@@ -1175,6 +1200,8 @@ def analyze_ai_insights():
                 'score': 88.50
             }
         }), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to analyze insights: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -1188,10 +1215,12 @@ def get_notifications():
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT id, title, description, type, read_status as `read`, created_at as timestamp FROM notifications WHERE user_id = %s ORDER BY created_at DESC", (user['id'],))
-            notifs = cursor.fetchall()
+            notifs = cursor.fetchall() or []
             for n in notifs:
                 n['timestamp'] = safe_dt_str(n.get('timestamp'), '%Y-%m-%d %H:%M')
         return jsonify(notifs), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to load notifications: {str(e)}'}), 500
     finally:
         conn.close()
 

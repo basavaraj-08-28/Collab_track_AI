@@ -38,8 +38,24 @@ async function handleRequest(requestFn, timeoutMs = 15000) {
   }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.error || errorData.message || `Server error (Status: ${response.status})`;
+    let errorData = {};
+    let rawText = '';
+    try {
+      rawText = await response.text();
+      errorData = JSON.parse(rawText);
+    } catch {
+      // not JSON
+    }
+    let message = errorData.error || errorData.message;
+    if (!message) {
+      if (rawText && (rawText.includes('ECONNREFUSED') || rawText.includes('connect ECONNREFUSED'))) {
+        message = 'Backend server is not running on port 5000. Please start Flask with "python backend/app.py".';
+      } else if (response.status === 500) {
+        message = 'Server error (Status: 500). Please ensure the Flask backend server is running and restarted with "python backend/app.py".';
+      } else {
+        message = `Server request failed (Status: ${response.status})`;
+      }
+    }
     const error = new Error(message);
     error.status = response.status;
     error.data = errorData;

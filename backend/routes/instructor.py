@@ -29,6 +29,7 @@ def get_authorized_instructor():
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute("UPDATE users SET role = 'instructor' WHERE id = %s", (user['id'],))
+        conn.commit()
         conn.close()
         user['role'] = 'instructor'
     except Exception:

@@ -65,7 +65,7 @@ export const StudentDashboard = () => {
   }
 
   const projects = data?.projects || [];
-  const activities = data?.activities || [];
+  const activities = data?.activities || data?.recentActivities || [];
   const scoreData = data?.score;
   const hasScore = scoreData && scoreData.overall !== undefined && scoreData.overall !== null;
 
