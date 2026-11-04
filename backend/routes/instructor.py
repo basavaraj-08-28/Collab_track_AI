@@ -135,22 +135,42 @@ def create_project():
                     VALUES (%s, %s, %s, %s, %s)
                 """, (name, code, description, deadline if deadline else None, user['id']))
                 proj_id = cursor.lastrowid
+                if not proj_id:
+                    cursor.execute("SELECT id FROM projects WHERE code = %s", (code,))
+                    p_row = cursor.fetchone()
+                    if p_row:
+                        proj_id = p_row['id']
 
+                init_group_id = None
                 if group_name:
                     cursor.execute("""
                         INSERT INTO groups (name, project_id, status)
                         VALUES (%s, %s, 'Active')
                     """, (group_name, proj_id))
+                    init_group_id = cursor.lastrowid
+                    if not init_group_id:
+                        cursor.execute("SELECT id FROM groups WHERE project_id = %s AND name = %s", (proj_id, group_name))
+                        g_row = cursor.fetchone()
+                        if g_row:
+                            init_group_id = g_row['id']
 
                 # Enroll initial students if provided
                 if student_ids and isinstance(student_ids, list):
                     for s_id in student_ids:
                         try:
                             s_id = int(s_id)
-                            cursor.execute("""
-                                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
-                                VALUES (%s, %s, 0.00, 'Active')
-                            """, (proj_id, s_id))
+                            # Verify student exists in users table
+                            cursor.execute("SELECT id FROM users WHERE id = %s", (s_id,))
+                            if cursor.fetchone():
+                                cursor.execute("""
+                                    INSERT OR IGNORE INTO project_enrollments (project_id, user_id, group_id, collaboration_score, status)
+                                    VALUES (%s, %s, %s, 0.00, 'Active')
+                                """, (proj_id, s_id, init_group_id))
+                                if init_group_id:
+                                    cursor.execute("""
+                                        INSERT OR IGNORE INTO group_members (group_id, user_id)
+                                        VALUES (%s, %s)
+                                    """, (init_group_id, s_id))
                         except (ValueError, TypeError):
                             pass
                     cursor.execute("""
@@ -159,9 +179,11 @@ def create_project():
                         WHERE id = %s
                     """, (proj_id, proj_id))
 
+                conn.commit()
+
                 cursor.execute("SELECT * FROM projects WHERE id = %s", (proj_id,))
                 new_proj = cursor.fetchone()
-                if new_proj.get('deadline'):
+                if new_proj and new_proj.get('deadline'):
                     new_proj['deadline'] = safe_dt_str(new_proj['deadline'], '%Y-%m-%d')
 
             return jsonify(new_proj), 201
@@ -192,9 +214,11 @@ def update_project(project_id):
                 WHERE id = %s
             """, (name, description, status, deadline, project_id))
 
+            conn.commit()
+
             cursor.execute("SELECT * FROM projects WHERE id = %s", (project_id,))
             updated = cursor.fetchone()
-            if updated.get('deadline'):
+            if updated and updated.get('deadline'):
                 updated['deadline'] = safe_dt_str(updated['deadline'], '%Y-%m-%d')
 
         return jsonify(updated), 200
@@ -211,6 +235,7 @@ def delete_project(project_id):
     try:
         with conn.cursor() as cursor:
             cursor.execute("DELETE FROM projects WHERE id = %s", (project_id,))
+            conn.commit()
         return jsonify({'message': 'Project deleted successfully'}), 200
     finally:
         conn.close()
@@ -294,11 +319,22 @@ def assign_project():
             if existing:
                 return jsonify({'message': f"Student {student['name']} is already enrolled in this project.", 'alreadyAssigned': True, 'success': True}), 200
 
+            # If project has an initial group, also associate group_id and group_members
+            cursor.execute("SELECT id FROM groups WHERE project_id = %s ORDER BY id ASC LIMIT 1", (project_id,))
+            grp = cursor.fetchone()
+            grp_id = grp['id'] if grp else None
+
             # Insert enrollment record with 0.00 initial score
             cursor.execute("""
-                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
-                VALUES (%s, %s, 0.00, 'Active')
-            """, (project_id, student_id))
+                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, group_id, collaboration_score, status)
+                VALUES (%s, %s, %s, 0.00, 'Active')
+            """, (project_id, student_id, grp_id))
+
+            if grp_id:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO group_members (group_id, user_id)
+                    VALUES (%s, %s)
+                """, (grp_id, student_id))
 
             # Update student count in projects table
             cursor.execute("""
@@ -306,6 +342,8 @@ def assign_project():
                 SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
                 WHERE id = %s
             """, (project_id, project_id))
+
+            conn.commit()
 
         return jsonify({
             'message': f"Project assigned successfully to {student['name']}.",

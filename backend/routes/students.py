@@ -196,11 +196,13 @@ def get_dashboard():
                 SELECT DISTINCT p.id, p.name, p.code, p.description, 
                        COALESCE(pe.collaboration_score, 0.0) as collaboration_score, 
                        COALESCE(pe.status, p.status, 'Active') as status,
-                       pe.group_id, g.name as group_name
+                       pe.group_id,
+                       COALESCE(g.name, (SELECT name FROM groups gr WHERE gr.project_id = p.id LIMIT 1), 'Group') as group_name
                 FROM projects p
                 LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
                 LEFT JOIN groups g ON pe.group_id = g.id
                 WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
+                ORDER BY p.created_at DESC
             """, (user['id'], user['id'], user['id']))
             projects = cursor.fetchall()
             for p in projects:
@@ -211,7 +213,7 @@ def get_dashboard():
                 # Fetch members
                 cursor.execute("""
                     SELECT u.id, u.name, u.email, u.avatar, pe2.collaboration_score as score, pe2.status,
-                           COALESCE(u.title, 'Team Member') as role
+                           COALESCE(NULLIF(u.title, ''), 'Team Member') as role
                     FROM project_enrollments pe2
                     JOIN users u ON pe2.user_id = u.id
                     WHERE pe2.project_id = %s
@@ -229,8 +231,8 @@ def get_dashboard():
                     WHERE project_id = %s
                 """, (p['id'],))
                 t_stats = cursor.fetchone()
-                p['totalTasks'] = t_stats['total'] or 0
-                p['tasksCompleted'] = t_stats['completed'] or 0
+                p['totalTasks'] = (t_stats['total'] if t_stats else 0) or 0
+                p['tasksCompleted'] = (t_stats['completed'] if t_stats else 0) or 0
                 p['progress'] = int((p['tasksCompleted'] / p['totalTasks'] * 100)) if p['totalTasks'] > 0 else 0
                 p['group'] = p.get('group_name') or 'Group'
 
@@ -265,11 +267,13 @@ def get_projects():
             cursor.execute("""
                 SELECT DISTINCT p.id, p.name, p.code, p.description, p.status, p.deadline, 
                        COALESCE(pe.collaboration_score, 0.0) as collaboration_score, 
-                       pe.group_id, g.name as group_name
+                       pe.group_id,
+                       COALESCE(g.name, (SELECT name FROM groups gr WHERE gr.project_id = p.id LIMIT 1), 'Group') as group_name
                 FROM projects p
                 LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
                 LEFT JOIN groups g ON pe.group_id = g.id
                 WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
+                ORDER BY p.created_at DESC
             """, (user['id'], user['id'], user['id']))
             projects = cursor.fetchall()
             for p in projects:
@@ -283,7 +287,7 @@ def get_projects():
                 # Fetch enrolled team members
                 cursor.execute("""
                     SELECT u.id, u.name, u.email, u.avatar, pe2.collaboration_score as score, pe2.status,
-                           COALESCE(u.title, 'Team Member') as role
+                           COALESCE(NULLIF(u.title, ''), 'Team Member') as role
                     FROM project_enrollments pe2
                     JOIN users u ON pe2.user_id = u.id
                     WHERE pe2.project_id = %s
@@ -301,8 +305,8 @@ def get_projects():
                     WHERE project_id = %s
                 """, (p['id'],))
                 t_stats = cursor.fetchone()
-                p['totalTasks'] = t_stats['total'] or 0
-                p['tasksCompleted'] = t_stats['completed'] or 0
+                p['totalTasks'] = (t_stats['total'] if t_stats else 0) or 0
+                p['tasksCompleted'] = (t_stats['completed'] if t_stats else 0) or 0
                 p['progress'] = int((p['tasksCompleted'] / p['totalTasks'] * 100)) if p['totalTasks'] > 0 else 0
                 p['group'] = p.get('group_name') or 'Group'
 
@@ -321,12 +325,13 @@ def get_project_by_id(project_id):
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT p.id, p.name, p.code, p.description, p.status, p.deadline, 
-                       pe.collaboration_score, pe.group_id, g.name as group_name
+                       COALESCE(pe.collaboration_score, 0.0) as collaboration_score, pe.group_id,
+                       COALESCE(g.name, (SELECT name FROM groups gr WHERE gr.project_id = p.id LIMIT 1), 'Group') as group_name
                 FROM projects p
                 LEFT JOIN project_enrollments pe ON p.id = pe.project_id AND pe.user_id = %s
                 LEFT JOIN groups g ON pe.group_id = g.id
-                WHERE p.id = %s
-            """, (user['id'], project_id))
+                WHERE p.id = %s AND (pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s))
+            """, (user['id'], project_id, user['id'], user['id']))
             proj = cursor.fetchone()
             if not proj:
                 return jsonify({'error': 'Project not found'}), 404
@@ -341,7 +346,7 @@ def get_project_by_id(project_id):
             # Fetch enrolled team members
             cursor.execute("""
                 SELECT u.id, u.name, u.email, u.avatar, pe2.collaboration_score as score, pe2.status,
-                       COALESCE(u.title, 'Team Member') as role
+                           COALESCE(NULLIF(u.title, ''), 'Team Member') as role
                 FROM project_enrollments pe2
                 JOIN users u ON pe2.user_id = u.id
                 WHERE pe2.project_id = %s
@@ -582,7 +587,7 @@ def get_discussion_projects():
         with conn.cursor() as cursor:
             touch_user_activity(cursor, user['id'])
             if user['role'] == 'instructor':
-                cursor.execute("SELECT id, name, code, description FROM projects WHERE created_by = %s ORDER BY created_at DESC", (user['id'],))
+                cursor.execute("SELECT id, name, code, description FROM projects WHERE (created_by = %s OR created_by IS NULL) ORDER BY created_at DESC", (user['id'],))
             else:
                 cursor.execute("""
                     SELECT DISTINCT p.id, p.name, p.code, p.description

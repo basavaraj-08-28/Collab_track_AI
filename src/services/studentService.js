@@ -5,13 +5,7 @@ export const studentService = {
     try {
       return await api.get('/student/dashboard');
     } catch (err) {
-      console.warn('Backend API unavailable, using fallback empty state:', err.message);
-      return {
-        user: null,
-        stats: { projectsCount: 0, totalTasks: 0, completedTasks: 0, pendingTasks: 0, collaborationScore: null },
-        projects: [],
-        recentActivities: []
-      };
+      throw err;
     }
   },
 
@@ -19,7 +13,7 @@ export const studentService = {
     try {
       return await api.get('/student/projects');
     } catch (err) {
-      return [];
+      throw err;
     }
   },
 

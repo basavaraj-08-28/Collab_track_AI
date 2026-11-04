@@ -40,7 +40,10 @@ async function handleRequest(requestFn, timeoutMs = 15000) {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     const message = errorData.error || errorData.message || `Server error (Status: ${response.status})`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.data = errorData;
+    throw error;
   }
 
   return response.json();
