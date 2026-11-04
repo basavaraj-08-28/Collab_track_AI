@@ -63,28 +63,6 @@ export const ManageProjectsPage = () => {
       render: (val, row) => <Badge variant="blue">{val || row.groupName || 'Unassigned'}</Badge>
     },
     {
-      header: 'Progress',
-      key: 'progress',
-      render: (val) => (
-        <div className="flex items-center gap-2">
-          <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden">
-            <div className="bg-indigo-600 h-full" style={{ width: `${val || 0}%` }} />
-          </div>
-          <span className="font-bold text-xs text-slate-700">{val || 0}%</span>
-        </div>
-      )
-    },
-    {
-      header: 'Avg Score',
-      key: 'collaborationScore',
-      render: (val) => <span className="font-extrabold text-indigo-600">{val ? `${val} / 100` : 'Pending'}</span>
-    },
-    {
-      header: 'Tasks',
-      key: 'tasksCompleted',
-      render: (val, row) => `${val || 0} / ${row.totalTasks || 0}`
-    },
-    {
       header: 'Status',
       key: 'status',
       render: (val) => <Badge variant={val === 'Active' ? 'success' : 'warning'}>{val || 'Active'}</Badge>

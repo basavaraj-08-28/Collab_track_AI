@@ -452,34 +452,6 @@ export const InstructorProjectDetailsPage = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Priority</label>
-                <select
-                  value={taskModalData.priority}
-                  onChange={(e) => setTaskModalData({ ...taskModalData, priority: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Status</label>
-                <select
-                  value={taskModalData.status}
-                  onChange={(e) => setTaskModalData({ ...taskModalData, status: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
                 <label className="block font-bold text-slate-700 mb-1">Deadline</label>
                 <input
                   type="date"

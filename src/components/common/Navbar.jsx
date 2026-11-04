@@ -5,15 +5,13 @@ import {
   Bell,
   User,
   LogOut,
-  ChevronDown,
-  Shield,
-  GraduationCap
+  ChevronDown
 } from 'lucide-react';
 import BrandLogo from './BrandLogo';
 import UserAvatar from './UserAvatar';
 
 export const Navbar = ({ onToggleSidebar }) => {
-  const { role, user, switchRole, navigateTo, logout, unreadNotificationsCount } = useAuth();
+  const { role, user, navigateTo, logout, unreadNotificationsCount } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   return (
@@ -42,32 +40,6 @@ export const Navbar = ({ onToggleSidebar }) => {
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Role Switcher Pill */}
-        <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 text-xs font-semibold">
-          <button
-            onClick={() => switchRole('student')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all ${
-              role === 'student'
-                ? 'bg-white text-indigo-700 shadow-xs font-bold'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            <span>Student</span>
-          </button>
-          <button
-            onClick={() => switchRole('instructor')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all ${
-              role === 'instructor'
-                ? 'bg-white text-indigo-700 shadow-xs font-bold'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Instructor</span>
-          </button>
-        </div>
-
         {/* Notifications Icon */}
         <button
           onClick={() => {
