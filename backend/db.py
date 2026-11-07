@@ -166,7 +166,23 @@ class TursoCursorWrapper:
                 row_dict = {}
                 for idx, col in enumerate(cols):
                     cell = r[idx]
-                    val = cell.get("value") if isinstance(cell, dict) else cell
+                    if isinstance(cell, dict):
+                        cell_type = cell.get("type")
+                        val = cell.get("value")
+                        if cell_type == "null" or val is None:
+                            val = None
+                        elif cell_type == "integer":
+                            try:
+                                val = int(val)
+                            except (ValueError, TypeError):
+                                val = 0
+                        elif cell_type == "float":
+                            try:
+                                val = float(val)
+                            except (ValueError, TypeError):
+                                val = 0.0
+                    else:
+                        val = cell
                     row_dict[col] = val
                 self._results.append(row_dict)
 

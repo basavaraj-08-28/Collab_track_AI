@@ -156,7 +156,10 @@ def get_dashboard():
                 WHERE pe.user_id = %s OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = %s)
             """, (user['id'], user['id'], user['id']))
             p_res = cursor.fetchone()
-            projects_count = (p_res.get('count') if p_res else 0) or 0
+            try:
+                projects_count = int(p_res.get('count') or 0) if p_res else 0
+            except (ValueError, TypeError):
+                projects_count = 0
 
             # Fetch tasks count
             cursor.execute("""
@@ -167,6 +170,18 @@ def get_dashboard():
                 FROM tasks WHERE assigned_to = %s
             """, (user['id'],))
             task_stats = cursor.fetchone() or {}
+            try:
+                t_total = int(task_stats.get('total_tasks') or 0)
+            except (ValueError, TypeError):
+                t_total = 0
+            try:
+                t_completed = int(task_stats.get('completed_tasks') or 0)
+            except (ValueError, TypeError):
+                t_completed = 0
+            try:
+                t_pending = int(task_stats.get('pending_tasks') or 0)
+            except (ValueError, TypeError):
+                t_pending = 0
 
             # Dynamic authentic performance collaboration score
             user_score_data = compute_student_collaboration_score(cursor, user['id'])
@@ -220,20 +235,28 @@ def get_dashboard():
                     WHERE project_id = %s
                 """, (p['id'],))
                 t_stats = cursor.fetchone() or {}
-                p['totalTasks'] = (t_stats.get('total') or 0)
-                p['tasksCompleted'] = (t_stats.get('completed') or 0)
-                p['progress'] = int((p['tasksCompleted'] / p['totalTasks'] * 100)) if p['totalTasks'] > 0 else 0
+                try:
+                    tot_t = int(t_stats.get('total') or 0)
+                except (ValueError, TypeError):
+                    tot_t = 0
+                try:
+                    comp_t = int(t_stats.get('completed') or 0)
+                except (ValueError, TypeError):
+                    comp_t = 0
+                p['totalTasks'] = tot_t
+                p['tasksCompleted'] = comp_t
+                p['progress'] = int((comp_t / tot_t * 100)) if tot_t > 0 else 0
                 p['group'] = p.get('group_name') or 'Group'
 
         return jsonify({
             'user': user,
-            'totalTasks': task_stats.get('total_tasks') or 0,
-            'tasksCompleted': task_stats.get('completed_tasks') or 0,
+            'totalTasks': t_total,
+            'tasksCompleted': t_completed,
             'stats': {
                 'projectsCount': projects_count,
-                'totalTasks': task_stats.get('total_tasks') or 0,
-                'completedTasks': task_stats.get('completed_tasks') or 0,
-                'pendingTasks': task_stats.get('pending_tasks') or 0,
+                'totalTasks': t_total,
+                'completedTasks': t_completed,
+                'pendingTasks': t_pending,
                 'collaborationScore': avg_score
             },
             'projects': projects,
@@ -298,9 +321,17 @@ def get_projects():
                     WHERE project_id = %s
                 """, (p['id'],))
                 t_stats = cursor.fetchone() or {}
-                p['totalTasks'] = (t_stats.get('total') or 0)
-                p['tasksCompleted'] = (t_stats.get('completed') or 0)
-                p['progress'] = int((p['tasksCompleted'] / p['totalTasks'] * 100)) if p['totalTasks'] > 0 else 0
+                try:
+                    tot_t = int(t_stats.get('total') or 0)
+                except (ValueError, TypeError):
+                    tot_t = 0
+                try:
+                    comp_t = int(t_stats.get('completed') or 0)
+                except (ValueError, TypeError):
+                    comp_t = 0
+                p['totalTasks'] = tot_t
+                p['tasksCompleted'] = comp_t
+                p['progress'] = int((comp_t / tot_t * 100)) if tot_t > 0 else 0
                 p['group'] = p.get('group_name') or 'Group'
 
         return jsonify(projects), 200
@@ -358,9 +389,17 @@ def get_project_by_id(project_id):
                 WHERE project_id = %s
             """, (project_id,))
             t_stats = cursor.fetchone() or {}
-            proj['totalTasks'] = (t_stats.get('total') or 0)
-            proj['tasksCompleted'] = (t_stats.get('completed') or 0)
-            proj['progress'] = int((proj['tasksCompleted'] / proj['totalTasks'] * 100)) if proj['totalTasks'] > 0 else 0
+            try:
+                tot_t = int(t_stats.get('total') or 0)
+            except (ValueError, TypeError):
+                tot_t = 0
+            try:
+                comp_t = int(t_stats.get('completed') or 0)
+            except (ValueError, TypeError):
+                comp_t = 0
+            proj['totalTasks'] = tot_t
+            proj['tasksCompleted'] = comp_t
+            proj['progress'] = int((comp_t / tot_t * 100)) if tot_t > 0 else 0
             proj['group'] = proj.get('group_name') or 'Group'
 
         return jsonify(proj), 200
