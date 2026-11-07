@@ -7,7 +7,7 @@ import UserAvatar from '../../components/common/UserAvatar';
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
-import { FolderKanban, Search, ArrowRight, Calendar } from 'lucide-react';
+import { FolderKanban, Search, ArrowRight, Calendar, Code2 } from 'lucide-react';
 
 export const MyProjectsPage = () => {
   const { navigateTo } = useAuth();
@@ -164,13 +164,23 @@ export const MyProjectsPage = () => {
                   </span>
                 </div>
 
-                <button
-                  onClick={() => navigateTo('project-details', { projectId: proj.id })}
-                  className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5"
-                >
-                  <span>View Details</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => navigateTo('student-ide', { projectId: proj.id })}
+                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shadow-xs"
+                    title="Open Project Code Studio"
+                  >
+                    <Code2 className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Open IDE</span>
+                  </button>
+                  <button
+                    onClick={() => navigateTo('project-details', { projectId: proj.id })}
+                    className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    <span>View Details</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}

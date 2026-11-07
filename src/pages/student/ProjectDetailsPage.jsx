@@ -8,7 +8,7 @@ import SkeletonLoader from '../../components/common/SkeletonLoader';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import { useToast } from '../../context/ToastContext';
-import { FolderKanban, CheckSquare, Users, FileText, Upload, Calendar, ArrowLeft, Award, Sparkles } from 'lucide-react';
+import { FolderKanban, CheckSquare, Users, FileText, Upload, Calendar, ArrowLeft, Award, Sparkles, Code2 } from 'lucide-react';
 
 export const ProjectDetailsPage = () => {
   const { selectedProjectId, navigateTo } = useAuth();
@@ -109,11 +109,20 @@ export const ProjectDetailsPage = () => {
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">{project.description || 'No project description provided.'}</p>
           </div>
 
-          <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer">
-            <Upload className="w-4 h-4" />
-            <span>Upload Document</span>
-            <input type="file" onChange={handleFileUpload} className="hidden" />
-          </label>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => navigateTo('student-ide', { projectId: project.id })}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2"
+            >
+              <Code2 className="w-4 h-4 text-indigo-400" />
+              <span>Code Studio / IDE</span>
+            </button>
+            <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>Upload Document</span>
+              <input type="file" onChange={handleFileUpload} className="hidden" />
+            </label>
+          </div>
         </div>
       </div>
 

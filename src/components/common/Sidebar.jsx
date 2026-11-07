@@ -17,7 +17,8 @@ import {
   GraduationCap,
   ShieldCheck,
   FileSpreadsheet,
-  Layers
+  Layers,
+  Code2
 } from 'lucide-react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
@@ -26,6 +27,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
   const studentLinks = [
     { id: 'student-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'my-projects', label: 'My Projects', icon: FolderKanban },
+    { id: 'student-ide', label: 'Code Studio / IDE', icon: Code2 },
     { id: 'my-tasks', label: 'My Tasks', icon: CheckSquare },
     { id: 'messages', label: 'Discussions', icon: MessageSquare },
     { id: 'student-analytics', label: 'Analytics', icon: BarChart3 },

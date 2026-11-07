@@ -18,6 +18,7 @@ const MyTasksPage = lazy(() => import('./pages/student/MyTasksPage'));
 const MessagesDiscussionPage = lazy(() => import('./pages/student/MessagesDiscussionPage'));
 const PerformanceAnalyticsPage = lazy(() => import('./pages/student/PerformanceAnalyticsPage'));
 const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage'));
+const StudentIDEPage = lazy(() => import('./pages/student/StudentIDEPage'));
 
 // Instructor Pages (Lazy Loaded on demand)
 const InstructorDashboard = lazy(() => import('./pages/instructor/InstructorDashboard'));
@@ -62,6 +63,8 @@ const AppContent = () => {
         return <StudentDashboard />;
       case 'my-projects':
         return <MyProjectsPage />;
+      case 'student-ide':
+        return <StudentIDEPage />;
       case 'project-details':
         return <ProjectDetailsPage />;
       case 'my-tasks':
