@@ -4,8 +4,14 @@
 
 const rawApiUrl = import.meta.env.VITE_API_URL;
 const cleanRawUrl = rawApiUrl && rawApiUrl.trim() ? rawApiUrl.trim().replace(/\/+$/, '') : '';
-export const API_BASE_URL = cleanRawUrl
-  ? cleanRawUrl
+let resolvedBaseUrl = cleanRawUrl;
+if (!import.meta.env.DEV && resolvedBaseUrl && (resolvedBaseUrl.includes('localhost') || resolvedBaseUrl.includes('127.0.0.1'))) {
+  // Guard: if in production build and VITE_API_URL was accidentally set to localhost, fallback to relative /api
+  console.warn('[Collab Track AI] Detected localhost API_BASE_URL in production build. Falling back to relative /api.');
+  resolvedBaseUrl = '/api';
+}
+export const API_BASE_URL = resolvedBaseUrl
+  ? resolvedBaseUrl
   : (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
 const getAuthHeaders = () => {

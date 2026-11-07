@@ -1,9 +1,12 @@
 import os
 from dotenv import load_dotenv
 
-# Explicitly load .env from the backend directory
+# Explicitly load .env from the backend directory and project root
 env_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(env_path)
+parent_env = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+if os.path.exists(parent_env):
+    load_dotenv(parent_env)
 
 class Config:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))

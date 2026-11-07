@@ -218,13 +218,19 @@ def get_db_connection(use_db=True):
         os.makedirs(db_dir, exist_ok=True)
 
     # In serverless environments (Vercel), copy bundled seed database to /tmp if it doesn't exist yet
-    if Config.is_serverless and not os.path.exists(db_path):
-        bundled_seed = os.path.join(Config.BASE_DIR, 'collab_track_ai.db')
-        if os.path.exists(bundled_seed):
+    if Config.is_serverless and (not os.path.exists(db_path) or os.path.getsize(db_path) == 0):
+        candidate_seeds = [
+            os.path.join(Config.BASE_DIR, 'collab_track_ai.db'),
+            os.path.join(os.path.dirname(Config.BASE_DIR), 'backend', 'collab_track_ai.db'),
+            os.path.join(os.getcwd(), 'backend', 'collab_track_ai.db'),
+            os.path.join(os.getcwd(), 'collab_track_ai.db'),
+        ]
+        bundled_seed = next((p for p in candidate_seeds if os.path.exists(p) and os.path.getsize(p) > 0), None)
+        if bundled_seed:
             try:
                 import shutil
                 shutil.copy2(bundled_seed, db_path)
-                print(f"[OK] Seeded serverless database at '{db_path}' from bundled template.")
+                print(f"[OK] Seeded serverless database at '{db_path}' from '{bundled_seed}'.")
             except Exception as e:
                 print(f"[WARN] Could not seed database: {e}")
 
@@ -233,7 +239,9 @@ def get_db_connection(use_db=True):
     sqlite_conn.isolation_level = None  # Autocommit mode
 
     try:
-        sqlite_conn.execute("PRAGMA journal_mode=WAL;")
+        # In serverless Lambda /tmp, DELETE journal mode avoids tmpfs shared-memory locking
+        mode = "DELETE" if Config.is_serverless else "WAL"
+        sqlite_conn.execute(f"PRAGMA journal_mode={mode};")
         sqlite_conn.execute("PRAGMA foreign_keys=ON;")
         sqlite_conn.execute("PRAGMA busy_timeout=30000;")
     except Exception:

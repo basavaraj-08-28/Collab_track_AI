@@ -25,12 +25,32 @@ class VercelPathMiddleware:
 
     def __call__(self, environ, start_response):
         path = environ.get('PATH_INFO', '')
-        if path.startswith('/api/index.py'):
-            environ['PATH_INFO'] = path.replace('/api/index.py', '/api', 1)
-        elif path.startswith('/api/index'):
-            environ['PATH_INFO'] = path.replace('/api/index', '/api', 1)
-        elif not path.startswith('/api') and path != '/':
-            environ['PATH_INFO'] = '/api' + path
+
+        # If PATH_INFO is literally the entry script name or empty
+        if path in ('/api/index.py', '/api/index', '/index.py', '', '/api', '/api/'):
+            orig_uri = (
+                environ.get('HTTP_X_MATCHED_PATH') or
+                environ.get('REQUEST_URI') or
+                environ.get('RAW_URI') or
+                ''
+            )
+            if orig_uri and orig_uri not in ('/', '/api', '/api/'):
+                path = orig_uri.split('?')[0]
+
+        # Handle cases where path is prefixed with the handler filename:
+        # e.g. /api/index.py/auth/login -> /api/auth/login
+        if path.startswith('/api/index.py/'):
+            path = '/api/' + path[len('/api/index.py/'):]
+        elif path.startswith('/api/index/'):
+            path = '/api/' + path[len('/api/index/'):]
+        elif path.startswith('/index.py/'):
+            path = '/api/' + path[len('/index.py/'):]
+
+        # Ensure path begins with /api if it's an API route (e.g. /auth/login -> /api/auth/login)
+        if not path.startswith('/api') and path != '/':
+            path = '/api' + path
+
+        environ['PATH_INFO'] = path
         return self.wsgi_app(environ, start_response)
 
 app.wsgi_app = VercelPathMiddleware(app.wsgi_app)
@@ -60,13 +80,46 @@ except Exception as _init_err:
 @app.route('/health', methods=['GET'])
 def health_check():
     from config import Config as _Cfg
+    from db import get_db_connection
     db_info = _Cfg.TURSO_DATABASE_URL if _Cfg.TURSO_DATABASE_URL else os.path.basename(_Cfg.DATABASE_PATH)
+    counts = {'users': 0, 'projects': 0}
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) as c FROM users;")
+            u = cur.fetchone()
+            counts['users'] = u.get('c', 0) if isinstance(u, dict) else (u[0] if u else 0)
+            cur.execute("SELECT COUNT(*) as c FROM projects;")
+            p = cur.fetchone()
+            counts['projects'] = p.get('c', 0) if isinstance(p, dict) else (p[0] if p else 0)
+        conn.close()
+    except Exception as e:
+        counts['error'] = str(e)
+
     return jsonify({
         'status': 'healthy',
         'application': 'Collab Track AI API',
         'database': f"Turso ({db_info})" if _Cfg.TURSO_DATABASE_URL else f"SQLite ({db_info})",
+        'records': counts,
         'version': '1.0.0'
     }), 200
+
+@app.errorhandler(404)
+def handle_404(e):
+    from flask import request
+    return jsonify({
+        "error": "Not Found",
+        "message": f"Endpoint '{request.path}' was not found.",
+        "status": 404
+    }), 404
+
+@app.errorhandler(500)
+def handle_500(e):
+    return jsonify({
+        "error": "Internal Server Error",
+        "message": str(e),
+        "status": 500
+    }), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
