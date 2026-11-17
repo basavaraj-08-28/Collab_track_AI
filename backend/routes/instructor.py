@@ -1,5 +1,7 @@
+import os
+import base64
 import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response, send_file
 from werkzeug.security import generate_password_hash
 from db import get_db_connection
 from routes.auth import get_current_user_from_request
@@ -69,12 +71,32 @@ def get_dashboard():
                 if p.get('deadline'):
                     p['deadline'] = safe_dt_str(p['deadline'], '%Y-%m-%d')
 
+            # Fetch recent student deliverable submissions across instructor's projects
+            cursor.execute("""
+                SELECT t.id, t.title, t.project_id as projectId, p.name as projectName,
+                       t.assigned_to as studentId, u.name as studentName, u.avatar as studentAvatar,
+                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                       t.submitted_at as submittedAt
+                FROM tasks t
+                JOIN projects p ON t.project_id = p.id
+                JOIN users u ON t.assigned_to = u.id
+                WHERE (p.created_by = %s OR p.created_by IS NULL)
+                  AND (t.submission_file IS NOT NULL OR t.submission_notes IS NOT NULL)
+                ORDER BY t.submitted_at DESC
+                LIMIT 5
+            """, (user['id'],))
+            recent_submissions = cursor.fetchall() or []
+            for s in recent_submissions:
+                if s.get('submittedAt'):
+                    s['submittedAt'] = safe_dt_str(s['submittedAt'], '%Y-%m-%d %H:%M')
+
         return jsonify({
             'stats': {
                 'activeProjects': projects_count,
                 'totalStudents': students_count
             },
-            'projects': projects
+            'projects': projects,
+            'recentSubmissions': recent_submissions
         }), 200
     finally:
         conn.close()
@@ -588,7 +610,9 @@ def get_project_tasks(project_id):
             cursor.execute("""
                 SELECT t.id, t.title, t.description, t.project_id as projectId,
                        t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
-                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt
+                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
+                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                       t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
                 FROM tasks t
                 LEFT JOIN users u ON t.assigned_to = u.id
                 WHERE t.project_id = %s
@@ -600,6 +624,8 @@ def get_project_tasks(project_id):
                     t['dueDate'] = safe_dt_str(t['dueDate'], '%Y-%m-%d')
                 if t.get('createdAt'):
                     t['createdAt'] = safe_dt_str(t['createdAt'], '%Y-%m-%d %H:%M')
+                if t.get('submittedAt'):
+                    t['submittedAt'] = safe_dt_str(t['submittedAt'], '%Y-%m-%d %H:%M')
         return jsonify(tasks), 200
     finally:
         conn.close()
@@ -668,7 +694,9 @@ def create_project_task(project_id):
             cursor.execute("""
                 SELECT t.id, t.title, t.description, t.project_id as projectId,
                        t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
-                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt
+                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
+                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                       t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
                 FROM tasks t
                 LEFT JOIN users u ON t.assigned_to = u.id
                 WHERE t.id = %s
@@ -676,6 +704,8 @@ def create_project_task(project_id):
             new_task = cursor.fetchone()
             if new_task.get('dueDate'):
                 new_task['dueDate'] = safe_dt_str(new_task['dueDate'], '%Y-%m-%d')
+            if new_task.get('submittedAt'):
+                new_task['submittedAt'] = safe_dt_str(new_task['submittedAt'], '%Y-%m-%d %H:%M')
 
         return jsonify(new_task), 201
     finally:
@@ -739,7 +769,9 @@ def update_instructor_task(task_id):
             cursor.execute("""
                 SELECT t.id, t.title, t.description, t.project_id as projectId,
                        t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
-                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt
+                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
+                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                       t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
                 FROM tasks t
                 LEFT JOIN users u ON t.assigned_to = u.id
                 WHERE t.id = %s
@@ -747,6 +779,8 @@ def update_instructor_task(task_id):
             updated = cursor.fetchone()
             if updated.get('dueDate'):
                 updated['dueDate'] = safe_dt_str(updated['dueDate'], '%Y-%m-%d')
+            if updated.get('submittedAt'):
+                updated['submittedAt'] = safe_dt_str(updated['submittedAt'], '%Y-%m-%d %H:%M')
 
         return jsonify(updated), 200
     finally:
@@ -839,5 +873,76 @@ def assign_task_to_student(task_id):
         }), 200
     except Exception as e:
         return jsonify({'error': f'Database error assigning task: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+@instructor_bp.route('/tasks/<int:task_id>/file', methods=['GET'])
+def get_task_file_instructor(task_id):
+    user = get_authorized_instructor()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT submission_file, submission_file_data FROM tasks WHERE id = %s", (task_id,))
+            task = cursor.fetchone()
+            if not task or not task.get('submission_file'):
+                return jsonify({'error': 'No file submitted for this task'}), 404
+
+            file_data = task.get('submission_file_data')
+            filename = task.get('submission_file') or 'submitted_deliverable.pdf'
+
+            if file_data and ',' in str(file_data):
+                header, b64content = file_data.split(',', 1)
+                mime = 'application/pdf' if 'pdf' in header.lower() or filename.lower().endswith('.pdf') else 'application/octet-stream'
+                raw_bytes = base64.b64decode(b64content)
+                resp = Response(raw_bytes, mimetype=mime)
+                resp.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+                return resp
+
+            uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+            clean_name = filename.replace('/', '_').replace('\\', '_')
+            safe_filename = f"task_{task_id}_{clean_name}"
+            disk_path = os.path.join(uploads_dir, safe_filename)
+            if not os.path.exists(disk_path):
+                disk_path = os.path.join(uploads_dir, filename)
+
+            if os.path.exists(disk_path):
+                return send_file(disk_path, as_attachment=False, download_name=filename)
+
+            return jsonify({'error': 'File content not found on server', 'fileName': filename}), 404
+    finally:
+        conn.close()
+
+@instructor_bp.route('/students/<int:student_id>/tasks', methods=['GET'])
+def get_student_tasks_for_instructor(student_id):
+    user = get_authorized_instructor()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT t.id, t.title, t.description, t.project_id as projectId,
+                       p.name as projectName, t.status, t.due_date as dueDate, t.priority,
+                       t.created_at as createdAt, t.submission_file as submissionFile,
+                       t.submission_notes as submissionNotes, t.submitted_at as submittedAt,
+                       t.submission_file_data as submissionFileData
+                FROM tasks t
+                JOIN projects p ON t.project_id = p.id
+                WHERE t.assigned_to = %s
+                ORDER BY t.created_at DESC
+            """, (student_id,))
+            tasks = cursor.fetchall() or []
+            for t in tasks:
+                if t.get('dueDate'):
+                    t['dueDate'] = safe_dt_str(t['dueDate'], '%Y-%m-%d')
+                if t.get('createdAt'):
+                    t['createdAt'] = safe_dt_str(t['createdAt'], '%Y-%m-%d %H:%M')
+                if t.get('submittedAt'):
+                    t['submittedAt'] = safe_dt_str(t['submittedAt'], '%Y-%m-%d %H:%M')
+        return jsonify(tasks), 200
     finally:
         conn.close()

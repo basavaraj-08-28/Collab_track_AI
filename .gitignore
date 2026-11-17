@@ -45,3 +45,6 @@ __pycache__/
 
 # Local development files
 *.local
+
+# Uploaded deliverables
+backend/uploads/

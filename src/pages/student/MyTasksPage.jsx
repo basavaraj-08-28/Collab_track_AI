@@ -21,7 +21,9 @@ import {
   CheckCircle2, 
   File, 
   AlertCircle,
-  Award
+  Award,
+  Download,
+  ExternalLink
 } from 'lucide-react';
 
 export const MyTasksPage = () => {
@@ -171,6 +173,44 @@ export const MyTasksPage = () => {
     return { label: 'DOC', bg: 'bg-indigo-50 border-indigo-200 text-indigo-700', badgeColor: 'bg-indigo-600' };
   };
 
+  const handleOpenFile = (task, e) => {
+    if (e) e.stopPropagation();
+    if (!task) return;
+    if (task.submissionFileData) {
+      if (task.submissionFileData.startsWith('data:')) {
+        const win = window.open();
+        if (win) {
+          win.document.write(
+            `<iframe src="${task.submissionFileData}" frameborder="0" style="border:0; position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%;" allowfullscreen></iframe>`
+          );
+          win.document.title = task.submissionFile || 'Submitted Deliverable';
+          return;
+        }
+      }
+    }
+    window.open(`/api/student/tasks/${task.id}/file`, '_blank');
+  };
+
+  const handleDownloadFile = (task, e) => {
+    if (e) e.stopPropagation();
+    if (!task) return;
+    if (task.submissionFileData && task.submissionFileData.startsWith('data:')) {
+      const a = document.createElement('a');
+      a.href = task.submissionFileData;
+      a.download = task.submissionFile || 'deliverable.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = `/api/student/tasks/${task.id}/file`;
+    a.download = task.submissionFile || 'deliverable.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleTaskSubmit = async (e) => {
     e.preventDefault();
     if (!selectedTask) return;
@@ -183,7 +223,17 @@ export const MyTasksPage = () => {
     setIsSubmitting(true);
     try {
       const fileName = attachedFile ? attachedFile.name : null;
-      await studentService.submitTask(selectedTask.id, submissionNotes.trim(), fileName);
+      let fileData = null;
+      if (attachedFile && attachedFile instanceof File) {
+        fileData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(attachedFile);
+        });
+      }
+
+      await studentService.submitTask(selectedTask.id, submissionNotes.trim(), fileName, fileData);
       
       setTasks((prev) =>
         prev.map((t) =>
@@ -192,6 +242,7 @@ export const MyTasksPage = () => {
                 ...t,
                 status: 'Completed',
                 submissionFile: fileName,
+                submissionFileData: fileData || t.submissionFileData,
                 submissionNotes: submissionNotes.trim(),
                 submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
               }
@@ -353,6 +404,24 @@ export const MyTasksPage = () => {
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Deliverable submitted
                           </p>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenFile(task, e)}
+                          className="p-1.5 bg-white hover:bg-slate-100 text-indigo-700 rounded-lg border border-slate-200 transition-colors"
+                          title="Open Deliverable in New Tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDownloadFile(task, e)}
+                          className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 transition-colors"
+                          title="Download File"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   )}

@@ -9,7 +9,20 @@ import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../context/ToastContext';
-import { GraduationCap, Search, Eye, PlusCircle, UserPlus } from 'lucide-react';
+import { 
+  GraduationCap, 
+  Search, 
+  Eye, 
+  PlusCircle, 
+  UserPlus,
+  FileText,
+  Download,
+  ExternalLink,
+  CheckCircle2,
+  MessageSquare,
+  AlertCircle,
+  CheckSquare
+} from 'lucide-react';
 
 export const StudentContributionsPage = () => {
   const { navigateTo } = useAuth();
@@ -21,6 +34,74 @@ export const StudentContributionsPage = () => {
   const [error, setError] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [studentTasks, setStudentTasks] = useState([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [activePreviewPdfTask, setActivePreviewPdfTask] = useState(null);
+
+  const handleSelectStudentForInspection = async (student) => {
+    setSelectedStudent(student);
+    setActivePreviewPdfTask(null);
+    setLoadingTasks(true);
+    try {
+      const tasks = await instructorService.getStudentTasks(student.id);
+      setStudentTasks(Array.isArray(tasks) ? tasks : []);
+    } catch (err) {
+      console.error('Failed to load student tasks:', err);
+      setStudentTasks([]);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const getFileBadgeInfo = (fileName = '') => {
+    const name = (fileName || '').toLowerCase();
+    if (name.endsWith('.pdf')) {
+      return { label: 'PDF', bg: 'bg-rose-50 border-rose-200 text-rose-700', badgeColor: 'bg-rose-600' };
+    }
+    if (name.endsWith('.doc') || name.endsWith('.docx')) {
+      return { label: 'DOC', bg: 'bg-blue-50 border-blue-200 text-blue-700', badgeColor: 'bg-blue-600' };
+    }
+    if (name.endsWith('.ppt') || name.endsWith('.pptx')) {
+      return { label: 'PPT', bg: 'bg-orange-50 border-orange-200 text-orange-700', badgeColor: 'bg-orange-600' };
+    }
+    return { label: 'DOC', bg: 'bg-indigo-50 border-indigo-200 text-indigo-700', badgeColor: 'bg-indigo-600' };
+  };
+
+  const handleOpenStudentFile = (task, e) => {
+    if (e) e.stopPropagation();
+    if (!task) return;
+    if (task.submissionFileData && task.submissionFileData.startsWith('data:')) {
+      const win = window.open();
+      if (win) {
+        win.document.write(
+          `<iframe src="${task.submissionFileData}" frameborder="0" style="border:0; position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%;" allowfullscreen></iframe>`
+        );
+        win.document.title = task.submissionFile || 'Student Deliverable';
+        return;
+      }
+    }
+    window.open(`/api/instructor/tasks/${task.id}/file`, '_blank');
+  };
+
+  const handleDownloadStudentFile = (task, e) => {
+    if (e) e.stopPropagation();
+    if (!task) return;
+    if (task.submissionFileData && task.submissionFileData.startsWith('data:')) {
+      const a = document.createElement('a');
+      a.href = task.submissionFileData;
+      a.download = task.submissionFile || 'student_deliverable.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = `/api/instructor/tasks/${task.id}/file`;
+    a.download = task.submissionFile || 'student_deliverable.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   // Form state for adding new real student
   const [newStudent, setNewStudent] = useState({
@@ -162,7 +243,7 @@ export const StudentContributionsPage = () => {
       sortable: false,
       render: (_, row) => (
         <button
-          onClick={() => setSelectedStudent(row)}
+          onClick={() => handleSelectStudentForInspection(row)}
           className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1"
         >
           <Eye className="w-3.5 h-3.5" />
@@ -304,23 +385,139 @@ export const StudentContributionsPage = () => {
       {selectedStudent && (
         <Modal
           isOpen={!!selectedStudent}
-          onClose={() => setSelectedStudent(null)}
+          onClose={() => {
+            setSelectedStudent(null);
+            setActivePreviewPdfTask(null);
+          }}
           title={`Student: ${selectedStudent.name}`}
         >
           <div className="space-y-4 text-xs">
             <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
               <UserAvatar name={selectedStudent.name} avatar={selectedStudent.avatar} size="lg" />
-              <div>
-                <h4 className="text-base font-extrabold text-slate-900">{selectedStudent.name}</h4>
-                <p className="text-xs text-slate-500">{selectedStudent.email}</p>
+              <div className="min-w-0">
+                <h4 className="text-base font-extrabold text-slate-900 truncate">{selectedStudent.name}</h4>
+                <p className="text-xs text-slate-500 truncate">{selectedStudent.email}</p>
                 <p className="text-xs text-slate-400 mt-0.5">
                   ID: {selectedStudent.studentId || 'N/A'} • Group: {selectedStudent.group || 'Unassigned'}
                 </p>
               </div>
             </div>
 
-            <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-semibold">
-              Project: {selectedStudent.project || 'Unassigned'}
+            <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-semibold flex items-center justify-between">
+              <span>Project: {selectedStudent.project || 'Unassigned'}</span>
+              <span className="font-bold text-indigo-700">
+                Collaboration Score: {selectedStudent.score ? `${selectedStudent.score}/100` : (selectedStudent.collaborationScore ? `${selectedStudent.collaborationScore}/100` : 'Pending')}
+              </span>
+            </div>
+
+            {/* Assigned Tasks & Submitted Deliverables Section */}
+            <div className="space-y-2">
+              <h5 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                <CheckSquare className="w-4 h-4 text-indigo-600" />
+                Assigned Tasks & Deliverables ({studentTasks.length})
+              </h5>
+
+              {loadingTasks ? (
+                <div className="p-4 text-center text-slate-400">Loading student tasks...</div>
+              ) : studentTasks.length === 0 ? (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-slate-400">
+                  No tasks currently assigned to this student.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {studentTasks.map((task) => (
+                    <div key={task.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-slate-900 block">{task.title}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">Project: {task.projectName}</span>
+                        </div>
+                        <Badge variant={task.status === 'Completed' ? 'success' : task.status === 'In Progress' ? 'warning' : 'default'}>
+                          {task.status}
+                        </Badge>
+                      </div>
+
+                      {/* Submitted File Info */}
+                      {task.submissionFile ? (
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-black shrink-0 ${getFileBadgeInfo(task.submissionFile).badgeColor} text-white`}>
+                              {getFileBadgeInfo(task.submissionFile).label}
+                            </span>
+                            <div className="min-w-0">
+                              <span className="font-bold text-slate-800 text-[11px] block truncate">
+                                {task.submissionFile}
+                              </span>
+                              {task.submittedAt && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  Submitted {task.submittedAt}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {task.submissionFile.toLowerCase().endsWith('.pdf') && (
+                              <button
+                                type="button"
+                                onClick={() => setActivePreviewPdfTask(activePreviewPdfTask?.id === task.id ? null : task)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] rounded border border-rose-200 transition-colors flex items-center gap-1"
+                              >
+                                <FileText className="w-3 h-3" />
+                                <span>{activePreviewPdfTask?.id === task.id ? 'Hide PDF' : 'Preview PDF'}</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenStudentFile(task, e)}
+                              className="p-1 bg-slate-50 hover:bg-slate-100 text-indigo-700 rounded border border-slate-200 transition-colors"
+                              title="Open in New Tab"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDownloadStudentFile(task, e)}
+                              className="p-1 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded border border-slate-200 transition-colors"
+                              title="Download File"
+                            >
+                              <Download className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : task.submissionNotes ? (
+                        <div className="p-2 bg-amber-50 rounded border border-amber-200 text-amber-900 text-[11px]">
+                          <span className="font-bold block mb-0.5">Deliverable Notes:</span>
+                          <p className="whitespace-pre-wrap">{task.submissionNotes}</p>
+                        </div>
+                      ) : null}
+
+                      {/* PDF Preview container if toggled */}
+                      {activePreviewPdfTask?.id === task.id && (
+                        <div className="mt-2 w-full h-64 rounded-xl border border-slate-200 overflow-hidden bg-white shadow-inner">
+                          <iframe
+                            src={task.submissionFileData || `/api/instructor/tasks/${task.id}/file`}
+                            title={task.submissionFile}
+                            className="w-full h-full"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStudent(null);
+                  setActivePreviewPdfTask(null);
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </Modal>

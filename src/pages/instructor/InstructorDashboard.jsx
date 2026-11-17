@@ -7,7 +7,7 @@ import UserAvatar from '../../components/common/UserAvatar';
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorState from '../../components/common/ErrorState';
-import { Shield, FolderKanban, Users, Award, AlertTriangle, ArrowRight, PlusCircle, Brain } from 'lucide-react';
+import { Shield, FolderKanban, Users, Award, AlertTriangle, ArrowRight, PlusCircle, Brain, FileText, CheckCircle2 } from 'lucide-react';
 
 export const InstructorDashboard = () => {
   const { user, navigateTo } = useAuth();
@@ -51,6 +51,7 @@ export const InstructorDashboard = () => {
   const projects = data?.projects || [];
   const totalStudents = data?.stats?.totalStudents ?? data?.totalStudents ?? 0;
   const activeProjectsCount = data?.stats?.activeProjects ?? data?.activeProjectsCount ?? projects.length;
+  const recentSubmissions = data?.recentSubmissions || [];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
@@ -171,6 +172,59 @@ export const InstructorDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Recent Student Submissions Section */}
+      {recentSubmissions.length > 0 && (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-indigo-600" />
+              Recent Student Submissions ({recentSubmissions.length})
+            </h3>
+            <span className="text-xs text-slate-400">Latest task deliverables across your projects</span>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {recentSubmissions.map((sub) => (
+              <div
+                key={sub.id}
+                onClick={() => navigateTo('instructor-project-details', { projectId: sub.projectId })}
+                className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 rounded-2xl px-3 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <UserAvatar name={sub.studentName} avatar={sub.studentAvatar} size="md" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 text-xs truncate">{sub.studentName}</span>
+                      <span className="text-[10px] text-slate-400 font-medium">in {sub.projectName}</span>
+                    </div>
+                    <p className="text-[11px] font-semibold text-indigo-700 truncate mt-0.5">
+                      Task: {sub.title}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                  {sub.submissionFile && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg text-[11px] font-bold">
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      {sub.submissionFile}
+                    </span>
+                  )}
+                  {sub.submittedAt && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {sub.submittedAt}
+                    </span>
+                  )}
+                  <span className="text-xs font-bold text-indigo-600 flex items-center gap-1 ml-2">
+                    Review <ArrowRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import os
 import time
 import datetime
 import json
@@ -423,6 +424,7 @@ def get_tasks():
                        t.project_id as projectId,
                        t.submission_file as submissionFile, t.submission_notes as submissionNotes, 
                        t.submitted_at as submittedAt, t.created_at as assignedDate,
+                       t.submission_file_data as submissionFileData,
                        p.name as project, p.name as projectName
                 FROM tasks t
                 JOIN projects p ON t.project_id = p.id
@@ -491,6 +493,7 @@ def submit_task():
     task_id = data.get('taskId')
     notes = (data.get('notes') or '').strip()
     submission_file = data.get('submissionFile') or data.get('fileName') or None
+    submission_file_data = data.get('submissionFileData') or data.get('fileData') or None
 
     if not task_id:
         return jsonify({'error': 'Task ID is required'}), 400
@@ -503,14 +506,40 @@ def submit_task():
             project_id = task_info['project_id'] if task_info else None
             task_title = task_info['title'] if task_info else 'Task'
 
-            cursor.execute("""
-                UPDATE tasks 
-                SET status = 'Completed', 
-                    submission_notes = %s,
-                    submission_file = %s,
-                    submitted_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND assigned_to = %s
-            """, (notes, submission_file, task_id, user['id']))
+            # Save file to uploads directory if file data was supplied
+            if submission_file and submission_file_data and ',' in str(submission_file_data):
+                try:
+                    import base64
+                    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+                    os.makedirs(uploads_dir, exist_ok=True)
+                    clean_name = submission_file.replace('/', '_').replace('\\', '_')
+                    safe_filename = f"task_{task_id}_{clean_name}"
+                    file_bytes = base64.b64decode(submission_file_data.split(',', 1)[1])
+                    disk_target = os.path.join(uploads_dir, safe_filename)
+                    with open(disk_target, 'wb') as f_out:
+                        f_out.write(file_bytes)
+                except Exception as save_err:
+                    print(f"[WARN] Failed to write file to uploads dir: {save_err}")
+
+            if submission_file_data is not None:
+                cursor.execute("""
+                    UPDATE tasks 
+                    SET status = 'Completed', 
+                        submission_notes = %s,
+                        submission_file = %s,
+                        submission_file_data = %s,
+                        submitted_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND assigned_to = %s
+                """, (notes, submission_file, submission_file_data, task_id, user['id']))
+            else:
+                cursor.execute("""
+                    UPDATE tasks 
+                    SET status = 'Completed', 
+                        submission_notes = %s,
+                        submission_file = COALESCE(%s, submission_file),
+                        submitted_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND assigned_to = %s
+                """, (notes, submission_file, task_id, user['id']))
             
             # Log activity in collaboration history
             act_type = 'Document Upload' if submission_file else 'Task Submission'
@@ -525,10 +554,53 @@ def submit_task():
             'message': 'Task submitted successfully', 
             'taskId': task_id, 
             'submissionFile': submission_file,
+            'submissionFileData': submission_file_data,
             'status': 'Completed'
         }), 200
     except Exception as e:
         return jsonify({'error': f'Failed to submit task: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+@students_bp.route('/tasks/<int:task_id>/file', methods=['GET'])
+def get_student_task_file(task_id):
+    user = get_current_user_from_request()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT submission_file, submission_file_data FROM tasks WHERE id = %s AND assigned_to = %s", (task_id, user['id']))
+            task = cursor.fetchone()
+            if not task or not task.get('submission_file'):
+                return jsonify({'error': 'No file submitted for this task'}), 404
+
+            file_data = task.get('submission_file_data')
+            filename = task.get('submission_file') or 'submitted_deliverable.pdf'
+
+            if file_data and ',' in str(file_data):
+                import base64
+                from flask import Response
+                header, b64content = file_data.split(',', 1)
+                mime = 'application/pdf' if 'pdf' in header.lower() or filename.lower().endswith('.pdf') else 'application/octet-stream'
+                raw_bytes = base64.b64decode(b64content)
+                resp = Response(raw_bytes, mimetype=mime)
+                resp.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+                return resp
+
+            uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+            clean_name = filename.replace('/', '_').replace('\\', '_')
+            safe_filename = f"task_{task_id}_{clean_name}"
+            disk_path = os.path.join(uploads_dir, safe_filename)
+            if not os.path.exists(disk_path):
+                disk_path = os.path.join(uploads_dir, filename)
+
+            if os.path.exists(disk_path):
+                from flask import send_file
+                return send_file(disk_path, as_attachment=False, download_name=filename)
+
+            return jsonify({'error': 'File data not available on server', 'fileName': filename}), 404
     finally:
         conn.close()
 

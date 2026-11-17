@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     score_impact INT DEFAULT 5,
     submission_file VARCHAR(500) NULL,
     submission_notes TEXT NULL,
+    submission_file_data LONGTEXT NULL,
     submitted_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,

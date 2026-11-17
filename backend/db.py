@@ -406,6 +406,10 @@ def init_db(force=False):
                 cursor.execute("ALTER TABLE tasks ADD COLUMN submitted_at TIMESTAMP NULL;")
             except Exception:
                 pass
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN submission_file_data TEXT;")
+            except Exception:
+                pass
 
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS activities (

@@ -41,12 +41,17 @@ export const studentService = {
     }
   },
 
-  async submitTask(taskId, notes = '', submissionFile = null) {
+  async submitTask(taskId, notes = '', submissionFile = null, submissionFileData = null) {
     try {
       const fileName = typeof submissionFile === 'string' 
         ? submissionFile 
         : (submissionFile?.name || null);
-      return await api.post('/student/tasks/submit', { taskId, notes, submissionFile: fileName });
+      return await api.post('/student/tasks/submit', { 
+        taskId, 
+        notes, 
+        submissionFile: fileName,
+        submissionFileData
+      });
     } catch (err) {
       throw err;
     }
