@@ -54,7 +54,7 @@ export const CollaborationAnalyticsPage = () => {
             <BarChart3 className="w-6 h-6 text-indigo-600" />
             Course Collaboration Analytics
           </h1>
-          <p className="text-xs text-slate-500 mt-1">Aggregate metrics across all active course groups and student cohorts.</p>
+          <p className="text-xs text-slate-500 mt-1">Aggregate metrics across all active course groups and students.</p>
         </div>
       </div>
 

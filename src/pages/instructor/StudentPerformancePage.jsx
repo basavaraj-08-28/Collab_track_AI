@@ -268,7 +268,7 @@ export const StudentPerformancePage = () => {
                 <span className="font-bold text-indigo-700">{currentStudent.project || 'Unassigned'}</span>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">Group / Cohort</span>
+                <span className="text-slate-400 text-[10px] uppercase font-bold block mb-0.5">Group</span>
                 <span className="font-bold text-slate-900">{currentStudent.group || 'Default Team'}</span>
               </div>
             </div>
