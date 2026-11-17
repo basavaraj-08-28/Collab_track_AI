@@ -116,10 +116,10 @@ export const StudentDashboard = () => {
         />
         <StatCard
           title="Discussion Updates"
-          value={activities.length}
-          subtext="Recent workspace activities"
-          trend="Live Activity"
-          trendType="up"
+          value={data?.stats?.discussionsCount ?? data?.discussionsCount ?? 0}
+          subtext="Messages posted in discussions"
+          trend={(data?.stats?.discussionsCount || data?.discussionsCount) ? "Active" : "No Activity"}
+          trendType={(data?.stats?.discussionsCount || data?.discussionsCount) ? "up" : "neutral"}
           icon={MessageSquare}
           iconBg="bg-purple-50 text-purple-600"
         />
@@ -228,7 +228,14 @@ export const StudentDashboard = () => {
                   <p className="text-xs text-slate-500 line-clamp-2 mb-4">{proj.description}</p>
 
                   <div className="grid grid-cols-2 gap-4 mb-4 pt-3 border-t border-slate-100">
-                    <ProgressBar value={proj.progress || 0} label="Sprint Progress" />
+                    <ProgressBar
+                      value={proj.progress || 0}
+                      label={
+                        proj.totalTasks
+                          ? `Sprint Progress (${proj.tasksCompleted || 0}/${proj.totalTasks} team tasks)`
+                          : 'Sprint Progress'
+                      }
+                    />
                     <div className="text-right">
                       <span className="text-xs text-slate-500 font-medium block">Collaboration Score</span>
                       <span className="text-sm font-extrabold text-indigo-600">

@@ -255,7 +255,7 @@ export const MyTasksPage = () => {
         )
       );
 
-      addToast(`Task "${selectedTask.title}" submitted successfully! +5 score recorded.`, 'success');
+      addToast(`Task "${selectedTask.title}" submitted successfully!`, 'success');
       handleCloseModal();
     } catch (err) {
       addToast(err.message || 'Task submission failed.', 'error');
@@ -340,17 +340,6 @@ export const MyTasksPage = () => {
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       {task.project || task.projectName || 'Assigned Project'}
                     </span>
-                    <Badge
-                      variant={
-                        task.priority === 'High'
-                          ? 'danger'
-                          : task.priority === 'Medium'
-                          ? 'warning'
-                          : 'default'
-                      }
-                    >
-                      {task.priority || 'Normal'}
-                    </Badge>
                   </div>
 
                   <h3 className="text-base font-bold text-slate-900 mb-2 leading-snug">{task.title}</h3>
@@ -384,14 +373,6 @@ export const MyTasksPage = () => {
                           <Calendar className="w-3.5 h-3.5" /> Deadline:
                         </span>
                         <span className="font-bold text-slate-800">{task.dueDate}</span>
-                      </div>
-                    )}
-                    {task.scoreImpact && (
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1 text-slate-500">
-                          <Award className="w-3.5 h-3.5 text-indigo-600" /> Score Impact:
-                        </span>
-                        <span className="font-bold text-indigo-700">+{task.scoreImpact} pts</span>
                       </div>
                     )}
                   </div>

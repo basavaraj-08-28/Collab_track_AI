@@ -188,6 +188,16 @@ def get_dashboard():
             user_score_data = compute_student_collaboration_score(cursor, user['id'])
             avg_score = user_score_data['overall']
 
+            # Fetch discussion messages count for this student
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM discussions WHERE sender_id = %s
+            """, (user['id'],))
+            disc_row = cursor.fetchone()
+            try:
+                discussions_count = int(disc_row.get('count') or 0) if disc_row else 0
+            except (ValueError, TypeError):
+                discussions_count = 0
+
             # Fetch recent activities
             cursor.execute("""
                 SELECT id, type, description, score_change, created_at as timestamp 
@@ -253,11 +263,13 @@ def get_dashboard():
             'user': user,
             'totalTasks': t_total,
             'tasksCompleted': t_completed,
+            'discussionsCount': discussions_count,
             'stats': {
                 'projectsCount': projects_count,
                 'totalTasks': t_total,
                 'completedTasks': t_completed,
                 'pendingTasks': t_pending,
+                'discussionsCount': discussions_count,
                 'collaborationScore': avg_score
             },
             'projects': projects,
