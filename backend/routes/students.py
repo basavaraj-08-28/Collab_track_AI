@@ -471,6 +471,17 @@ def update_task_status(task_id):
         with conn.cursor() as cursor:
             cursor.execute("SELECT t.*, p.name as projectName FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = %s AND t.assigned_to = %s", (task_id, user['id']))
             existing_task = cursor.fetchone()
+            if not existing_task:
+                return jsonify({'error': 'Task not found or not assigned to you'}), 404
+
+            # If task deadline has passed, cannot mark as completed
+            if new_status == 'Completed':
+                due_date = existing_task.get('due_date')
+                if due_date:
+                    today_str = datetime.date.today().strftime('%Y-%m-%d')
+                    due_str = safe_dt_str(due_date, '%Y-%m-%d')
+                    if due_str and due_str < today_str:
+                        return jsonify({'error': 'The deadline for this task has passed. Submissions are no longer accepted.'}), 400
 
             cursor.execute("UPDATE tasks SET status = %s WHERE id = %s AND assigned_to = %s", (new_status, task_id, user['id']))
             cursor.execute("SELECT t.*, p.name as projectName, p.name as project FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = %s", (task_id,))
@@ -515,6 +526,17 @@ def submit_task():
         with conn.cursor() as cursor:
             cursor.execute("SELECT t.*, p.name as projectName FROM tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = %s AND t.assigned_to = %s", (task_id, user['id']))
             task_info = cursor.fetchone()
+            if not task_info:
+                return jsonify({'error': 'Task not found or not assigned to you'}), 404
+
+            # Enforce task deadline: submissions closed once deadline has passed
+            due_date = task_info.get('due_date')
+            if due_date:
+                today_str = datetime.date.today().strftime('%Y-%m-%d')
+                due_str = safe_dt_str(due_date, '%Y-%m-%d')
+                if due_str and due_str < today_str:
+                    return jsonify({'error': 'The deadline for this task has passed. Submissions are no longer accepted.'}), 400
+
             project_id = task_info['project_id'] if task_info else None
             task_title = task_info['title'] if task_info else 'Task'
 

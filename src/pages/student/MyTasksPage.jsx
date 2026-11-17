@@ -57,12 +57,27 @@ export const MyTasksPage = () => {
     fetchTasks();
   }, []);
 
+  const isDeadlineOver = (dueDate) => {
+    if (!dueDate) return false;
+    try {
+      const dueStr = dueDate.includes('T') ? dueDate : `${dueDate}T23:59:59`;
+      const due = new Date(dueStr);
+      return !isNaN(due.getTime()) && due < new Date();
+    } catch {
+      return false;
+    }
+  };
+
   const filteredTasks = tasks.filter((task) => {
     if (filter === 'All') return true;
     return (task.status || '').toLowerCase() === filter.toLowerCase();
   });
 
   const handleOpenSubmitModal = (task) => {
+    if (isDeadlineOver(task.dueDate)) {
+      addToast('The deadline for this task has passed. Submissions are closed.', 'error');
+      return;
+    }
     setSelectedTask(task);
     setSubmissionNotes(task.submissionNotes || '');
     setAttachedFile(task.submissionFile ? { name: task.submissionFile, isExisting: true } : null);
@@ -76,6 +91,12 @@ export const MyTasksPage = () => {
   };
 
   const handleStatusChange = async (taskId, newStatus) => {
+    const targetTask = tasks.find((t) => t.id === taskId);
+    if (targetTask && isDeadlineOver(targetTask.dueDate) && newStatus === 'Completed') {
+      addToast('Cannot mark task as completed because the deadline has passed.', 'error');
+      return;
+    }
+
     try {
       await studentService.updateTaskStatus(taskId, newStatus);
       setTasks((prev) =>
@@ -83,7 +104,7 @@ export const MyTasksPage = () => {
       );
       addToast(`Task status updated to "${newStatus}".`, 'success');
     } catch (err) {
-      addToast('Failed to update task status.', 'error');
+      addToast(err.response?.data?.error || err.message || 'Failed to update task status.', 'error');
     }
   };
 
@@ -214,6 +235,11 @@ export const MyTasksPage = () => {
     e.preventDefault();
     if (!selectedTask) return;
 
+    if (isDeadlineOver(selectedTask.dueDate)) {
+      addToast('The deadline for this task has passed. Submissions are closed.', 'error');
+      return;
+    }
+
     if (!submissionNotes.trim() && !attachedFile) {
       addToast('Please upload a document/PDF deliverable or enter submission notes.', 'warning');
       return;
@@ -325,6 +351,7 @@ export const MyTasksPage = () => {
           {filteredTasks.map((task) => {
             const fileBadgeInfo = task.submissionFile ? getFileIconBadge(task.submissionFile) : null;
             const isCompleted = task.status === 'Completed';
+            const isPastDeadline = isDeadlineOver(task.dueDate);
 
             return (
               <div
@@ -332,6 +359,8 @@ export const MyTasksPage = () => {
                 className={`bg-white rounded-3xl p-6 border transition-all flex flex-col justify-between ${
                   isCompleted 
                     ? 'border-emerald-200/80 shadow-xs bg-linear-to-b from-emerald-50/20 to-white' 
+                    : isPastDeadline
+                    ? 'border-rose-200/80 shadow-xs bg-linear-to-b from-rose-50/10 to-white'
                     : 'border-slate-200/80 shadow-xs hover:shadow-md'
                 }`}
               >
@@ -340,6 +369,15 @@ export const MyTasksPage = () => {
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       {task.project || task.projectName || 'Assigned Project'}
                     </span>
+                    {isPastDeadline ? (
+                      <Badge variant={isCompleted ? 'success' : 'danger'}>
+                        {isCompleted ? 'Completed' : 'Deadline Passed'}
+                      </Badge>
+                    ) : (
+                      <Badge variant={isCompleted ? 'success' : (task.status === 'In Progress' ? 'primary' : 'default')}>
+                        {task.status || 'Pending'}
+                      </Badge>
+                    )}
                   </div>
 
                   <h3 className="text-base font-bold text-slate-900 mb-2 leading-snug">{task.title}</h3>
@@ -372,7 +410,14 @@ export const MyTasksPage = () => {
                         <span className="flex items-center gap-1 text-slate-500">
                           <Calendar className="w-3.5 h-3.5" /> Deadline:
                         </span>
-                        <span className="font-bold text-slate-800">{task.dueDate}</span>
+                        <span className={`font-bold flex items-center gap-1.5 ${isPastDeadline ? 'text-rose-600 font-extrabold' : 'text-slate-800'}`}>
+                          {task.dueDate}
+                          {isPastDeadline && (
+                            <span className="text-[9px] font-black uppercase bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded tracking-wide">
+                              Overdue
+                            </span>
+                          )}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -415,28 +460,53 @@ export const MyTasksPage = () => {
 
                 {/* Actions */}
                 <div className="pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleOpenSubmitModal(task)}
-                      className={`flex-1 py-2 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs ${
-                        isCompleted
-                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                      }`}
-                    >
-                      {isCompleted ? (
-                        <>
+                  {isPastDeadline ? (
+                    isCompleted ? (
+                      /* If completed and deadline over: student can view deliverable, but no re-upload / submit option */
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => handleOpenFile(task, e)}
+                          className="flex-1 py-2 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>View / Re-upload</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>Upload File & Submit</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                          <span>View Submitted Deliverable</span>
+                        </button>
+                      </div>
+                    ) : (
+                      /* If not completed and deadline over: completely remove submit option */
+                      <div className="w-full py-2.5 px-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-center gap-2 text-rose-700 select-none">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                        <div className="text-center">
+                          <span className="block text-xs font-bold leading-tight">Deadline Passed</span>
+                          <span className="block text-[10px] text-rose-600/80 font-medium">Submissions closed for this task</span>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    /* Deadline not over: allow submit / re-upload */
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenSubmitModal(task)}
+                        className={`flex-1 py-2 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs ${
+                          isCompleted
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
+                      >
+                        {isCompleted ? (
+                          <>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View / Re-upload</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Upload File & Submit</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -449,7 +519,7 @@ export const MyTasksPage = () => {
         <Modal
           isOpen={!!selectedTask}
           onClose={handleCloseModal}
-          title={`Submit Deliverable: ${selectedTask.title}`}
+          title={isDeadlineOver(selectedTask.dueDate) ? `Task Closed: ${selectedTask.title}` : `Submit Deliverable: ${selectedTask.title}`}
         >
           <div className="space-y-4 text-xs">
             {/* Task Context Summary */}
@@ -458,8 +528,8 @@ export const MyTasksPage = () => {
                 <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">
                   Project: {selectedTask.project || selectedTask.projectName || 'Active Project'}
                 </span>
-                <Badge variant={selectedTask.status === 'Completed' ? 'success' : 'default'}>
-                  {selectedTask.status}
+                <Badge variant={isDeadlineOver(selectedTask.dueDate) ? 'danger' : (selectedTask.status === 'Completed' ? 'success' : 'default')}>
+                  {isDeadlineOver(selectedTask.dueDate) && selectedTask.status !== 'Completed' ? 'Deadline Passed' : selectedTask.status}
                 </Badge>
               </div>
               <p className="text-slate-700 font-medium leading-relaxed">
@@ -467,7 +537,27 @@ export const MyTasksPage = () => {
               </p>
             </div>
 
-            <form onSubmit={handleTaskSubmit} className="space-y-4">
+            {isDeadlineOver(selectedTask.dueDate) ? (
+              <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-3">
+                <AlertCircle className="w-8 h-8 text-rose-600 mx-auto" />
+                <div>
+                  <h4 className="text-sm font-bold text-rose-900">Task Deadline Has Passed</h4>
+                  <p className="text-xs text-rose-700 mt-1">
+                    The deadline for this deliverable ({selectedTask.dueDate}) has passed. Submissions are closed and no longer accepted.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="px-5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold rounded-xl text-xs transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleTaskSubmit} className="space-y-4">
               {/* Document / PDF Upload Section */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
@@ -600,6 +690,7 @@ export const MyTasksPage = () => {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </Modal>
       )}
