@@ -7,12 +7,13 @@ import Modal from '../../components/common/Modal';
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 import EmptyState from '../../components/common/EmptyState';
 import { useToast } from '../../context/ToastContext';
-import { User, Mail, GraduationCap, Award, BookOpen, Edit2, CheckCircle2, Save, FolderKanban } from 'lucide-react';
+import { User, Mail, GraduationCap, Award, BookOpen, Edit2, CheckCircle2, Save, FolderKanban, BarChart2 } from 'lucide-react';
 
 export const StudentProfilePage = () => {
   const { user, updateUserProfile } = useAuth();
   const { addToast } = useToast();
   const [projects, setProjects] = useState([]);
+  const [scoreData, setScoreData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -26,8 +27,16 @@ export const StudentProfilePage = () => {
   });
 
   useEffect(() => {
-    studentService.getProjects().then((data) => {
-      setProjects(Array.isArray(data) ? data : []);
+    Promise.all([
+      studentService.getProjects().catch(() => []),
+      studentService.getScore().catch(() => null)
+    ]).then(([projectsData, scoreRes]) => {
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
+      if (scoreRes && (scoreRes.overall !== undefined || scoreRes.score !== undefined)) {
+        setScoreData(scoreRes);
+      }
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
 
@@ -57,7 +66,35 @@ export const StudentProfilePage = () => {
     );
   }
 
-  const hasScore = user?.overallScore !== null && user?.overallScore !== undefined;
+  // Derive collaboration score with multiple reliable fallbacks
+  const projectScore = projects.find(
+    (p) => p.collaborationScore !== undefined && p.collaborationScore !== null
+  )?.collaborationScore;
+
+  const rawScore =
+    scoreData?.overall ??
+    scoreData?.score ??
+    user?.overallScore ??
+    user?.collaborationScore ??
+    projectScore;
+
+  const hasScore = rawScore !== null && rawScore !== undefined;
+  const displayScore = hasScore ? Math.round(Number(rawScore)) : null;
+
+  const scoreLabel =
+    scoreData?.label ??
+    user?.scoreLabel ??
+    (displayScore !== null
+      ? displayScore >= 85
+        ? 'Distinguished Collaborator'
+        : displayScore >= 70
+        ? 'Active Collaborator'
+        : displayScore >= 40
+        ? 'Developing Contributor'
+        : displayScore > 0
+        ? 'Early Contributor'
+        : 'Active Contributor'
+      : 'Active Contributor');
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
@@ -86,9 +123,9 @@ export const StudentProfilePage = () => {
           </span>
           {hasScore ? (
             <>
-              <span className="text-3xl font-black text-indigo-600">{user.overallScore} / 100</span>
+              <span className="text-3xl font-black text-indigo-600">{displayScore} / 100</span>
               <span className="block text-[10px] text-emerald-600 font-bold mt-0.5">
-                {user.scoreLabel || 'Active'}
+                {scoreLabel}
               </span>
             </>
           ) : (
@@ -169,6 +206,52 @@ export const StudentProfilePage = () => {
             </div>
           </div>
         </div>
+
+        {/* AI Collaboration Performance Card */}
+        {hasScore && (
+          <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4 md:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <BarChart2 className="w-5 h-5 text-indigo-600" />
+                AI Collaboration Assessment & Breakdown
+              </h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500">Rating:</span>
+                <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                  {displayScore} / 100 • {scoreLabel}
+                </span>
+              </div>
+            </div>
+
+            {scoreData?.aiAssessment && (
+              <p className="text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 leading-relaxed">
+                {scoreData.aiAssessment}
+              </p>
+            )}
+
+            {Array.isArray(scoreData?.components) && scoreData.components.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                {scoreData.components.map((c, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-slate-600 truncate">{c.name}</span>
+                      <span className="text-[10px] text-slate-400 font-bold ml-1">{c.weight}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-base font-black text-slate-900">{Math.round(c.score)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, Math.max(0, c.score))}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit Profile Modal */}

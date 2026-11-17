@@ -122,6 +122,29 @@ def login():
                     'department': user['department'],
                     'avatar': user['avatar']
                 }
+
+                if user['role'] == 'student':
+                    try:
+                        from routes.students import compute_student_collaboration_score
+                        sc = compute_student_collaboration_score(cursor, user['id'])
+                        overall = sc.get('overall', 0)
+                        user_data['overallScore'] = overall
+                        user_data['collaborationScore'] = overall
+                        if overall >= 85:
+                            user_data['scoreLabel'] = 'Distinguished Collaborator'
+                        elif overall >= 70:
+                            user_data['scoreLabel'] = 'Active Collaborator'
+                        elif overall >= 40:
+                            user_data['scoreLabel'] = 'Developing Contributor'
+                        elif overall > 0:
+                            user_data['scoreLabel'] = 'Early Contributor'
+                        else:
+                            user_data['scoreLabel'] = 'Active Contributor'
+                    except Exception:
+                        user_data['overallScore'] = 0
+                        user_data['collaborationScore'] = 0
+                        user_data['scoreLabel'] = 'Active Contributor'
+
                 return jsonify({'message': 'Logged in successfully', 'token': token, 'user': user_data}), 200
         finally:
             conn.close()
@@ -149,6 +172,32 @@ def get_me():
         'department': user['department'],
         'avatar': user['avatar']
     }
+
+    if user.get('role') == 'student':
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                from routes.students import compute_student_collaboration_score
+                sc = compute_student_collaboration_score(cursor, user['id'])
+                overall = sc.get('overall', 0)
+                user_data['overallScore'] = overall
+                user_data['collaborationScore'] = overall
+                if overall >= 85:
+                    user_data['scoreLabel'] = 'Distinguished Collaborator'
+                elif overall >= 70:
+                    user_data['scoreLabel'] = 'Active Collaborator'
+                elif overall >= 40:
+                    user_data['scoreLabel'] = 'Developing Contributor'
+                elif overall > 0:
+                    user_data['scoreLabel'] = 'Early Contributor'
+                else:
+                    user_data['scoreLabel'] = 'Active Contributor'
+            conn.close()
+        except Exception:
+            user_data['overallScore'] = 0
+            user_data['collaborationScore'] = 0
+            user_data['scoreLabel'] = 'Active Contributor'
+
     return jsonify({'user': user_data}), 200
 
 @auth_bp.route('/profile', methods=['PUT'])
