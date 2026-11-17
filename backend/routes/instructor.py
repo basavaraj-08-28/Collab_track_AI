@@ -317,7 +317,8 @@ def get_students():
                        GROUP_CONCAT(DISTINCT p.name) as project,
                        GROUP_CONCAT(DISTINCT g.name) as `group`,
                        MAX(pe.collaboration_score) as score,
-                       COALESCE(MAX(pe.status), 'Active') as status
+                       COALESCE(MAX(pe.status), 'Active') as status,
+                       COALESCE(MAX(pe.grade), 'N/A') as grade
                 FROM users u
                 LEFT JOIN project_enrollments pe ON u.id = pe.user_id
                 LEFT JOIN projects p ON pe.project_id = p.id
@@ -326,10 +327,179 @@ def get_students():
                 GROUP BY u.id, u.name, u.email, u.student_id, u.avatar
                 ORDER BY u.name ASC
             """)
-            students = cursor.fetchall()
+            students = cursor.fetchall() or []
             for s in students:
-                s['score'] = float(s['score']) if s['score'] is not None else None
+                try:
+                    score_data = compute_student_collaboration_score(cursor, s['id'])
+                    s['score'] = score_data['overall']
+                    s['collaborationScore'] = score_data['overall']
+                    s['breakdown'] = score_data['breakdown']
+                    s['metrics'] = score_data['metrics']
+                    # Keep database synchronized with dynamic score
+                    cursor.execute("UPDATE project_enrollments SET collaboration_score = %s WHERE user_id = %s", (score_data['overall'], s['id']))
+                except Exception as sc_err:
+                    s['score'] = float(s['score']) if s.get('score') is not None else 0.0
+                    s['collaborationScore'] = s['score']
+            conn.commit()
         return jsonify(students), 200
+    finally:
+        conn.close()
+
+@instructor_bp.route('/students/<int:student_id>/performance', methods=['GET'])
+def get_student_performance(student_id):
+    user = get_authorized_instructor()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 1. Student profile & enrollment
+            cursor.execute("""
+                SELECT u.id, u.name, u.email, u.student_id as studentId, u.avatar,
+                       GROUP_CONCAT(DISTINCT p.name) as project,
+                       GROUP_CONCAT(DISTINCT g.name) as `group`,
+                       COALESCE(MAX(pe.status), 'Active') as status,
+                       COALESCE(MAX(pe.grade), 'N/A') as grade
+                FROM users u
+                LEFT JOIN project_enrollments pe ON u.id = pe.user_id
+                LEFT JOIN projects p ON pe.project_id = p.id
+                LEFT JOIN groups g ON pe.group_id = g.id
+                WHERE u.id = %s AND (u.role = 'student' OR u.role IS NULL)
+                GROUP BY u.id, u.name, u.email, u.student_id, u.avatar
+            """, (student_id,))
+            student = cursor.fetchone()
+            if not student:
+                return jsonify({'error': 'Student not found'}), 404
+
+            # 2. Dynamic Authentic AI Collaboration Score
+            score_data = compute_student_collaboration_score(cursor, student_id)
+            student['score'] = score_data['overall']
+            student['collaborationScore'] = score_data['overall']
+            student['breakdown'] = score_data['breakdown']
+            student['metrics'] = score_data['metrics']
+
+            # 3. Tasks assigned to student
+            cursor.execute("""
+                SELECT t.id, t.title, t.description, t.project_id as projectId,
+                       p.name as projectName, t.status, t.due_date as dueDate, t.priority,
+                       t.score_impact as scoreImpact, t.created_at as createdAt,
+                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                       t.submitted_at as submittedAt,
+                       CASE WHEN t.submission_file_data IS NOT NULL THEN 1 ELSE 0 END as hasFileData
+                FROM tasks t
+                JOIN projects p ON t.project_id = p.id
+                WHERE t.assigned_to = %s
+                ORDER BY t.created_at DESC
+            """, (student_id,))
+            tasks = cursor.fetchall() or []
+            for t in tasks:
+                if t.get('dueDate'):
+                    t['dueDate'] = safe_dt_str(t['dueDate'], '%Y-%m-%d')
+                if t.get('createdAt'):
+                    t['createdAt'] = safe_dt_str(t['createdAt'], '%Y-%m-%d %H:%M')
+                if t.get('submittedAt'):
+                    t['submittedAt'] = safe_dt_str(t['submittedAt'], '%Y-%m-%d %H:%M')
+
+            # 4. Discussions posted by student
+            cursor.execute("""
+                SELECT d.id, d.project_id as projectId, p.name as projectName,
+                       d.message, d.attachment_url as attachmentUrl, d.created_at as createdAt
+                FROM discussions d
+                JOIN projects p ON d.project_id = p.id
+                WHERE d.sender_id = %s
+                ORDER BY d.created_at DESC
+            """, (student_id,))
+            discussions = cursor.fetchall() or []
+            for d in discussions:
+                if d.get('createdAt'):
+                    d['createdAt'] = safe_dt_str(d['createdAt'], '%Y-%m-%d %H:%M')
+
+            # 5. Activities logged for student
+            cursor.execute("""
+                SELECT a.id, a.type, a.description, a.score_change as scoreChange,
+                       a.project_id as projectId, p.name as projectName, a.created_at as createdAt
+                FROM activities a
+                LEFT JOIN projects p ON a.project_id = p.id
+                WHERE a.user_id = %s
+                ORDER BY a.created_at DESC
+            """, (student_id,))
+            activities = cursor.fetchall() or []
+            for a in activities:
+                if a.get('createdAt'):
+                    a['createdAt'] = safe_dt_str(a['createdAt'], '%Y-%m-%d %H:%M')
+
+            # 6. Combined chronological student behavior history timeline
+            timeline = []
+            for t in tasks:
+                if t.get('submittedAt') or t.get('submissionFile') or t.get('status') == 'Completed':
+                    timeline.append({
+                        'id': f"task-sub-{t['id']}",
+                        'category': 'task',
+                        'type': 'Task Submission' if t.get('submissionFile') else 'Task Completed',
+                        'title': f"Deliverable Submitted: {t['title']}",
+                        'projectName': t.get('projectName', 'Project'),
+                        'description': t.get('submissionNotes') or 'Completed assigned sprint task deliverable.',
+                        'file': t.get('submissionFile'),
+                        'taskId': t['id'],
+                        'status': t.get('status'),
+                        'timestamp': t.get('submittedAt') or t.get('createdAt'),
+                        'rawTime': str(t.get('submittedAt') or t.get('createdAt') or '')
+                    })
+                else:
+                    timeline.append({
+                        'id': f"task-assign-{t['id']}",
+                        'category': 'task',
+                        'type': 'Task Assigned',
+                        'title': f"Assigned Task: {t['title']}",
+                        'projectName': t.get('projectName', 'Project'),
+                        'description': t.get('description') or f"Priority: {t.get('priority', 'Medium')} | Due: {t.get('dueDate', 'No due date')}",
+                        'file': None,
+                        'taskId': t['id'],
+                        'status': t.get('status'),
+                        'timestamp': t.get('createdAt'),
+                        'rawTime': str(t.get('createdAt') or '')
+                    })
+
+            for d in discussions:
+                timeline.append({
+                    'id': f"disc-{d['id']}",
+                    'category': 'discussion',
+                    'type': 'Team Discussion',
+                    'title': f"Posted in {d.get('projectName', 'Project Chat')}",
+                    'projectName': d.get('projectName', 'Project'),
+                    'description': d.get('message', ''),
+                    'file': d.get('attachmentUrl'),
+                    'timestamp': d.get('createdAt'),
+                    'rawTime': str(d.get('createdAt') or '')
+                })
+
+            for a in activities:
+                timeline.append({
+                    'id': f"act-{a['id']}",
+                    'category': 'activity',
+                    'type': a.get('type') or 'Activity',
+                    'title': a.get('type') or 'Sprint Activity',
+                    'projectName': a.get('projectName', 'Course Work'),
+                    'description': a.get('description', ''),
+                    'scoreChange': a.get('scoreChange', 0),
+                    'timestamp': a.get('createdAt'),
+                    'rawTime': str(a.get('createdAt') or '')
+                })
+
+            # Sort timeline reverse chronologically
+            timeline.sort(key=lambda x: x.get('rawTime') or '', reverse=True)
+
+        return jsonify({
+            'student': student,
+            'score': score_data['overall'],
+            'breakdown': score_data['breakdown'],
+            'metrics': score_data['metrics'],
+            'tasks': tasks,
+            'discussions': discussions,
+            'activities': activities,
+            'timeline': timeline
+        }), 200
     finally:
         conn.close()
 
@@ -594,11 +764,84 @@ def get_notifications():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id, title, description, type, read_status as `read`, created_at as timestamp FROM notifications WHERE user_id = %s ORDER BY created_at DESC", (user['id'],))
-            notifs = cursor.fetchall()
+            # 1. Fetch user notifications from notifications table
+            cursor.execute("""
+                SELECT id, title, description, type, read_status as `read`, created_at as timestamp 
+                FROM notifications 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC
+            """, (user['id'],))
+            notifs = cursor.fetchall() or []
             for n in notifs:
                 n['timestamp'] = safe_dt_str(n.get('timestamp'), '%Y-%m-%d %H:%M')
-        return jsonify(notifs), 200
+
+            # 2. Dynamic Project Deadline Notifications:
+            # Show the deadline of active projects UNTIL the project deadline is over
+            today = datetime.date.today()
+            today_str = today.strftime('%Y-%m-%d')
+
+            cursor.execute("""
+                SELECT p.id, p.name, p.code, p.deadline, p.status,
+                       (SELECT name FROM groups g WHERE g.project_id = p.id LIMIT 1) as groupName,
+                       (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status = 'Completed') as completedTasks,
+                       (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) as totalTasks
+                FROM projects p
+                WHERE (p.created_by = %s OR p.created_by IS NULL)
+                  AND (p.status != 'Completed' OR p.status IS NULL)
+                ORDER BY p.deadline ASC, p.id DESC
+            """, (user['id'],))
+            projects = cursor.fetchall() or []
+
+            deadline_notifs = []
+            for p in projects:
+                raw_deadline = p.get('deadline')
+                if not raw_deadline:
+                    continue
+                deadline_str = safe_dt_str(raw_deadline, '%Y-%m-%d')
+                try:
+                    deadline_date = datetime.datetime.strptime(deadline_str, '%Y-%m-%d').date()
+                    days_remaining = (deadline_date - today).days
+                except Exception:
+                    continue
+
+                # Show deadline UNTIL project deadline is over (days_remaining >= 0)
+                if days_remaining >= 0:
+                    group_text = f" • Team: {p['groupName']}" if p.get('groupName') else ""
+                    task_info = f" • {p.get('completedTasks', 0)}/{p.get('totalTasks', 0)} Deliverables Finished" if p.get('totalTasks') else ""
+
+                    if days_remaining == 0:
+                        urgency = 'urgent'
+                        title = f"🚨 Project Deadline Today: {p['name']}"
+                        desc = f"Final milestone deadline is TODAY ({deadline_str}) for '{p['name']}' ({p['code']}){group_text}{task_info}. Review deliverables and grade submissions."
+                    elif days_remaining == 1:
+                        urgency = 'urgent'
+                        title = f"⏰ 1 Day Remaining: {p['name']}"
+                        desc = f"Final project deadline is TOMORROW ({deadline_str}) for '{p['name']}' ({p['code']}){group_text}{task_info}."
+                    elif days_remaining <= 5:
+                        urgency = 'warning'
+                        title = f"⏳ Approaching Deadline: {p['name']} ({days_remaining} days left)"
+                        desc = f"Milestone deadline is {deadline_str} ({days_remaining} days remaining){group_text}{task_info}."
+                    else:
+                        urgency = 'normal'
+                        title = f"📅 Active Project Deadline: {p['name']}"
+                        desc = f"Scheduled milestone deadline is {deadline_str} ({days_remaining} days remaining){group_text}{task_info}."
+
+                    deadline_notifs.append({
+                        'id': f"deadline-proj-{p['id']}",
+                        'projectId': p['id'],
+                        'title': title,
+                        'description': desc,
+                        'type': 'deadline',
+                        'priority': urgency,
+                        'read': False,
+                        'daysRemaining': days_remaining,
+                        'deadline': deadline_str,
+                        'projectName': p['name'],
+                        'timestamp': today_str
+                    })
+
+            all_notifications = deadline_notifs + notifs
+        return jsonify(all_notifications), 200
     finally:
         conn.close()
 

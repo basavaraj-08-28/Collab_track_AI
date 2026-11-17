@@ -84,6 +84,14 @@ export const instructorService = {
     }
   },
 
+  async getStudentPerformance(studentId) {
+    try {
+      return await api.get(`/instructor/students/${studentId}/performance`);
+    } catch (err) {
+      return null;
+    }
+  },
+
   async getStudentTasks(studentId) {
     try {
       return await api.get(`/instructor/students/${studentId}/tasks`);
