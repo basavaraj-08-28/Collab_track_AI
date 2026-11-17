@@ -124,43 +124,29 @@ export const InstructorDashboard = () => {
                 <div
                   key={proj.id}
                   onClick={() => navigateTo('instructor-project-details', { projectId: proj.id })}
-                  className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
                 >
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start justify-between mb-4">
                     <div>
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                         {proj.code || 'PROJECT'}
                       </span>
                       <h4 className="text-base font-bold text-slate-900">{proj.name}</h4>
+                      {proj.description && (
+                        <p className="text-xs text-slate-500 line-clamp-2 mt-1">
+                          {proj.description}
+                        </p>
+                      )}
                     </div>
                     <Badge variant={proj.status === 'Active' ? 'success' : 'warning'}>
                       {proj.status || 'Active'}
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center text-xs my-4">
-                    <div>
-                      <span className="text-slate-400 text-[10px] font-bold uppercase block">Progress</span>
-                      <span className="font-extrabold text-slate-900">{proj.progress || 0}%</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[10px] font-bold uppercase block">Tasks</span>
-                      <span className="font-extrabold text-slate-900">
-                        {proj.tasksCompleted || 0}/{proj.totalTasks || 0}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[10px] font-bold uppercase block">Avg Score</span>
-                      <span className="font-extrabold text-indigo-600">
-                        {proj.collaborationScore ? proj.collaborationScore : 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-500">
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
                     <div className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{count} Enrolled Student{count === 1 ? '' : 's'}</span>
+                      <Users className="w-3.5 h-3.5 text-indigo-600" />
+                      <span className="font-medium">{count} Enrolled Student{count === 1 ? '' : 's'}</span>
                     </div>
                     <span className="font-bold text-indigo-600 flex items-center gap-1">
                       Details <ArrowRight className="w-3.5 h-3.5" />
