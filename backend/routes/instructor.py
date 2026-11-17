@@ -607,18 +607,31 @@ def get_project_tasks(project_id):
                 except Exception:
                     pass
 
-            cursor.execute("""
-                SELECT t.id, t.title, t.description, t.project_id as projectId,
-                       t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
-                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
-                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
-                       t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
-                FROM tasks t
-                LEFT JOIN users u ON t.assigned_to = u.id
-                WHERE t.project_id = %s
-                ORDER BY t.created_at DESC
-            """, (project_id,))
-            tasks = cursor.fetchall()
+            try:
+                cursor.execute("""
+                    SELECT t.id, t.title, t.description, t.project_id as projectId,
+                           t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
+                           t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
+                           t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                           t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
+                    FROM tasks t
+                    LEFT JOIN users u ON t.assigned_to = u.id
+                    WHERE t.project_id = %s
+                    ORDER BY t.created_at DESC
+                """, (project_id,))
+                tasks = cursor.fetchall() or []
+            except Exception:
+                cursor.execute("""
+                    SELECT t.id, t.title, t.description, t.project_id as projectId,
+                           t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
+                           t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt
+                    FROM tasks t
+                    LEFT JOIN users u ON t.assigned_to = u.id
+                    WHERE t.project_id = %s
+                    ORDER BY t.created_at DESC
+                """, (project_id,))
+                tasks = cursor.fetchall() or []
+
             for t in tasks:
                 if t.get('dueDate'):
                     t['dueDate'] = safe_dt_str(t['dueDate'], '%Y-%m-%d')
@@ -627,6 +640,9 @@ def get_project_tasks(project_id):
                 if t.get('submittedAt'):
                     t['submittedAt'] = safe_dt_str(t['submittedAt'], '%Y-%m-%d %H:%M')
         return jsonify(tasks), 200
+    except Exception as e:
+        print(f"[ERROR] get_project_tasks failed: {e}")
+        return jsonify({'error': f'Failed to load project tasks: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -669,15 +685,24 @@ def create_project_task(project_id):
                         # Ensure student is enrolled in project_enrollments
                         cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (project_id, assigned_to))
                         if not cursor.fetchone():
-                            cursor.execute("""
-                                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
-                                VALUES (%s, %s, 0.00, 'Active')
-                            """, (project_id, assigned_to))
-                            cursor.execute("""
-                                UPDATE projects 
-                                SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
-                                WHERE id = %s
-                            """, (project_id, project_id))
+                            try:
+                                cursor.execute("""
+                                    INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                                    VALUES (%s, %s, 0.00, 'Active')
+                                """, (project_id, assigned_to))
+                            except Exception:
+                                cursor.execute("""
+                                    INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                                    VALUES (%s, %s, 0.00, 'Active')
+                                """, (project_id, assigned_to))
+                            try:
+                                cursor.execute("""
+                                    UPDATE projects 
+                                    SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                                    WHERE id = %s
+                                """, (project_id, project_id))
+                            except Exception:
+                                pass
                     else:
                         assigned_to = None
                 except (ValueError, TypeError):
@@ -690,24 +715,68 @@ def create_project_task(project_id):
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (title, description, project_id, assigned_to, priority, status, due_date if due_date else None))
             task_id = cursor.lastrowid
+            if not task_id:
+                try:
+                    cursor.execute("SELECT id FROM tasks WHERE project_id = %s ORDER BY id DESC LIMIT 1", (project_id,))
+                    last_row = cursor.fetchone()
+                    if last_row:
+                        task_id = last_row.get('id') if isinstance(last_row, dict) else last_row[0]
+                except Exception:
+                    pass
 
-            cursor.execute("""
-                SELECT t.id, t.title, t.description, t.project_id as projectId,
-                       t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
-                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
-                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
-                       t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
-                FROM tasks t
-                LEFT JOIN users u ON t.assigned_to = u.id
-                WHERE t.id = %s
-            """, (task_id,))
-            new_task = cursor.fetchone()
-            if new_task.get('dueDate'):
-                new_task['dueDate'] = safe_dt_str(new_task['dueDate'], '%Y-%m-%d')
-            if new_task.get('submittedAt'):
-                new_task['submittedAt'] = safe_dt_str(new_task['submittedAt'], '%Y-%m-%d %H:%M')
+            new_task = None
+            if task_id:
+                try:
+                    cursor.execute("""
+                        SELECT t.id, t.title, t.description, t.project_id as projectId,
+                               t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
+                               t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
+                               t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                               t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
+                        FROM tasks t
+                        LEFT JOIN users u ON t.assigned_to = u.id
+                        WHERE t.id = %s
+                    """, (task_id,))
+                    new_task = cursor.fetchone()
+                except Exception:
+                    try:
+                        cursor.execute("""
+                            SELECT t.id, t.title, t.description, t.project_id as projectId,
+                                   t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
+                                   t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt
+                            FROM tasks t
+                            LEFT JOIN users u ON t.assigned_to = u.id
+                            WHERE t.id = %s
+                        """, (task_id,))
+                        new_task = cursor.fetchone()
+                    except Exception:
+                        new_task = None
+
+            if not new_task:
+                new_task = {
+                    'id': task_id or 0,
+                    'title': title,
+                    'description': description,
+                    'projectId': project_id,
+                    'assignedTo': assigned_to,
+                    'status': status,
+                    'dueDate': str(due_date or ''),
+                    'priority': priority,
+                    'submissionFile': None,
+                    'submissionFileData': None,
+                    'submissionNotes': None,
+                    'submittedAt': None
+                }
+            else:
+                if new_task.get('dueDate'):
+                    new_task['dueDate'] = safe_dt_str(new_task['dueDate'], '%Y-%m-%d')
+                if new_task.get('submittedAt'):
+                    new_task['submittedAt'] = safe_dt_str(new_task['submittedAt'], '%Y-%m-%d %H:%M')
 
         return jsonify(new_task), 201
+    except Exception as e:
+        print(f"[ERROR] create_project_task failed: {e}")
+        return jsonify({'error': f'Failed to create task: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -743,15 +812,24 @@ def update_instructor_task(task_id):
                     assigned_to = int(assigned_to)
                     cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (task['project_id'], assigned_to))
                     if not cursor.fetchone():
-                        cursor.execute("""
-                            INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
-                            VALUES (%s, %s, 0.00, 'Active')
-                        """, (task['project_id'], assigned_to))
-                        cursor.execute("""
-                            UPDATE projects 
-                            SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
-                            WHERE id = %s
-                        """, (task['project_id'], task['project_id']))
+                        try:
+                            cursor.execute("""
+                                INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                                VALUES (%s, %s, 0.00, 'Active')
+                            """, (task['project_id'], assigned_to))
+                        except Exception:
+                            cursor.execute("""
+                                INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                                VALUES (%s, %s, 0.00, 'Active')
+                            """, (task['project_id'], assigned_to))
+                        try:
+                            cursor.execute("""
+                                UPDATE projects 
+                                SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                                WHERE id = %s
+                            """, (task['project_id'], task['project_id']))
+                        except Exception:
+                            pass
                 except (ValueError, TypeError):
                     assigned_to = None
 
@@ -766,23 +844,45 @@ def update_instructor_task(task_id):
                 WHERE id = %s
             """, (title, description, priority, status, due_date, assigned_to, task_id))
 
-            cursor.execute("""
-                SELECT t.id, t.title, t.description, t.project_id as projectId,
-                       t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
-                       t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
-                       t.submission_file as submissionFile, t.submission_notes as submissionNotes,
-                       t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
-                FROM tasks t
-                LEFT JOIN users u ON t.assigned_to = u.id
-                WHERE t.id = %s
-            """, (task_id,))
-            updated = cursor.fetchone()
-            if updated.get('dueDate'):
-                updated['dueDate'] = safe_dt_str(updated['dueDate'], '%Y-%m-%d')
-            if updated.get('submittedAt'):
-                updated['submittedAt'] = safe_dt_str(updated['submittedAt'], '%Y-%m-%d %H:%M')
+            updated = None
+            try:
+                cursor.execute("""
+                    SELECT t.id, t.title, t.description, t.project_id as projectId,
+                           t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
+                           t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt,
+                           t.submission_file as submissionFile, t.submission_notes as submissionNotes,
+                           t.submitted_at as submittedAt, t.submission_file_data as submissionFileData
+                    FROM tasks t
+                    LEFT JOIN users u ON t.assigned_to = u.id
+                    WHERE t.id = %s
+                """, (task_id,))
+                updated = cursor.fetchone()
+            except Exception:
+                try:
+                    cursor.execute("""
+                        SELECT t.id, t.title, t.description, t.project_id as projectId,
+                               t.assigned_to as assignedTo, u.name as assignedToName, u.email as assignedToEmail,
+                               t.status, t.due_date as dueDate, t.priority, t.created_at as createdAt
+                        FROM tasks t
+                        LEFT JOIN users u ON t.assigned_to = u.id
+                        WHERE t.id = %s
+                    """, (task_id,))
+                    updated = cursor.fetchone()
+                except Exception:
+                    updated = None
+
+            if updated:
+                if updated.get('dueDate'):
+                    updated['dueDate'] = safe_dt_str(updated['dueDate'], '%Y-%m-%d')
+                if updated.get('submittedAt'):
+                    updated['submittedAt'] = safe_dt_str(updated['submittedAt'], '%Y-%m-%d %H:%M')
+            else:
+                updated = {'id': task_id, 'title': title, 'status': status}
 
         return jsonify(updated), 200
+    except Exception as e:
+        print(f"[ERROR] update_instructor_task failed: {e}")
+        return jsonify({'error': f'Failed to update task: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -852,15 +952,24 @@ def assign_task_to_student(task_id):
             # Ensure student is enrolled in project_enrollments
             cursor.execute("SELECT id FROM project_enrollments WHERE project_id = %s AND user_id = %s", (task['project_id'], student_id))
             if not cursor.fetchone():
-                cursor.execute("""
-                    INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
-                    VALUES (%s, %s, 0.00, 'Active')
-                """, (task['project_id'], student_id))
-                cursor.execute("""
-                    UPDATE projects 
-                    SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
-                    WHERE id = %s
-                """, (task['project_id'], task['project_id']))
+                try:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                        VALUES (%s, %s, 0.00, 'Active')
+                    """, (task['project_id'], student_id))
+                except Exception:
+                    cursor.execute("""
+                        INSERT INTO project_enrollments (project_id, user_id, collaboration_score, status)
+                        VALUES (%s, %s, 0.00, 'Active')
+                    """, (task['project_id'], student_id))
+                try:
+                    cursor.execute("""
+                        UPDATE projects 
+                        SET student_count = (SELECT COUNT(*) FROM project_enrollments WHERE project_id = %s) 
+                        WHERE id = %s
+                    """, (task['project_id'], task['project_id']))
+                except Exception:
+                    pass
 
             if task['assigned_to'] == student_id:
                 return jsonify({'error': 'Task is already assigned to this student.', 'alreadyAssigned': True}), 409

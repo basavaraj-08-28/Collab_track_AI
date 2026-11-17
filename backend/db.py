@@ -275,22 +275,6 @@ def init_db(force=False):
 
     try:
         conn = get_db_connection()
-        # Fast path: skip DDL migration if users table is already initialized
-        if not force:
-            table_exists = False
-            try:
-                with conn.cursor() as check_cursor:
-                    check_cursor.execute("SELECT 1 FROM users LIMIT 1;")
-                    check_cursor.fetchone()
-                    table_exists = True
-            except Exception:
-                table_exists = False
-
-            if table_exists:
-                conn.close()
-                _db_initialized = True
-                return
-
         with conn.cursor() as cursor:
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -408,6 +392,18 @@ def init_db(force=False):
                 pass
             try:
                 cursor.execute("ALTER TABLE tasks ADD COLUMN submission_file_data TEXT;")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN instructor_feedback TEXT;")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN review_status TEXT;")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN due_date DATE NULL;")
             except Exception:
                 pass
 

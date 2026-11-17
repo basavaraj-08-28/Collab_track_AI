@@ -52,7 +52,9 @@ async function handleRequest(requestFn, timeoutMs = 15000) {
     } catch {
       // not JSON
     }
-    let message = errorData.error || errorData.message;
+    let message = (errorData.error && errorData.error !== 'Internal Server Error')
+      ? errorData.error
+      : (errorData.message || errorData.error);
     if (!message) {
       if (rawText && (rawText.includes('ECONNREFUSED') || rawText.includes('connect ECONNREFUSED'))) {
         message = 'Backend server is not running on port 5000. Please start Flask with "python backend/app.py".';
