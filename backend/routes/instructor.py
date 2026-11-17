@@ -38,6 +38,53 @@ def get_authorized_instructor():
         pass
     return user
 
+def _enrich_project_details(cursor, p):
+    if not p:
+        return p
+    if p.get('deadline'):
+        p['deadline'] = safe_dt_str(p['deadline'], '%Y-%m-%d')
+    if p.get('created_at'):
+        p['created_at'] = safe_dt_str(p['created_at'], '%Y-%m-%d %H:%M')
+
+    # Fetch groups for this project
+    try:
+        cursor.execute("SELECT id, name FROM groups WHERE project_id = %s ORDER BY id ASC", (p['id'],))
+        groups = cursor.fetchall() or []
+    except Exception:
+        groups = []
+    p['group'] = groups[0]['name'] if groups else None
+    p['groupName'] = groups[0]['name'] if groups else None
+    p['groups'] = [g['name'] for g in groups]
+
+    # Fetch enrolled & task-assigned students
+    try:
+        cursor.execute("""
+            SELECT DISTINCT u.id, u.name, u.email, u.student_id as studentId, g.name as groupName
+            FROM users u
+            LEFT JOIN project_enrollments pe ON u.id = pe.user_id AND pe.project_id = %s
+            LEFT JOIN groups g ON pe.group_id = g.id
+            WHERE pe.project_id = %s OR u.id IN (SELECT assigned_to FROM tasks WHERE project_id = %s AND assigned_to IS NOT NULL)
+            ORDER BY u.name ASC
+        """, (p['id'], p['id'], p['id']))
+        members = cursor.fetchall() or []
+    except Exception:
+        members = []
+
+    p['members'] = members
+    p['assignedStudents'] = members
+    p['studentCount'] = len(members)
+    p['enrolled_students'] = len(members)
+    p['studentNames'] = [m['name'] for m in members if m.get('name')]
+
+    if not p['group'] and members:
+        for m in members:
+            if m.get('groupName'):
+                p['group'] = m['groupName']
+                p['groupName'] = m['groupName']
+                break
+
+    return p
+
 @instructor_bp.route('/dashboard', methods=['GET'])
 def get_dashboard():
     user = get_authorized_instructor()
@@ -67,9 +114,7 @@ def get_dashboard():
             """, (user['id'],))
             projects = cursor.fetchall()
             for p in projects:
-                p['student_count'] = p['enrolled_students']
-                if p.get('deadline'):
-                    p['deadline'] = safe_dt_str(p['deadline'], '%Y-%m-%d')
+                _enrich_project_details(cursor, p)
 
             # Fetch recent student deliverable submissions across instructor's projects
             cursor.execute("""
@@ -116,8 +161,7 @@ def get_projects():
                 cursor.execute("SELECT * FROM projects ORDER BY created_at DESC")
             projects = cursor.fetchall()
             for p in projects:
-                if p.get('deadline'):
-                    p['deadline'] = safe_dt_str(p['deadline'], '%Y-%m-%d')
+                _enrich_project_details(cursor, p)
         return jsonify(projects), 200
     finally:
         conn.close()
@@ -206,8 +250,8 @@ def create_project():
 
                 cursor.execute("SELECT * FROM projects WHERE id = %s", (proj_id,))
                 new_proj = cursor.fetchone()
-                if new_proj and new_proj.get('deadline'):
-                    new_proj['deadline'] = safe_dt_str(new_proj['deadline'], '%Y-%m-%d')
+                if new_proj:
+                    new_proj = _enrich_project_details(cursor, new_proj)
 
             return jsonify(new_proj), 201
         finally:
@@ -241,8 +285,8 @@ def update_project(project_id):
 
             cursor.execute("SELECT * FROM projects WHERE id = %s", (project_id,))
             updated = cursor.fetchone()
-            if updated and updated.get('deadline'):
-                updated['deadline'] = safe_dt_str(updated['deadline'], '%Y-%m-%d')
+            if updated:
+                updated = _enrich_project_details(cursor, updated)
 
         return jsonify(updated), 200
     finally:
@@ -578,11 +622,14 @@ def get_project_members(project_id):
                     pass
 
             cursor.execute("""
-                SELECT u.id, u.name, u.email, u.student_id as studentId
+                SELECT DISTINCT u.id, u.name, u.email, u.student_id as studentId, g.name as groupName
                 FROM users u
-                JOIN project_enrollments pe ON u.id = pe.user_id
-                WHERE pe.project_id = %s AND u.role = 'student'
-            """, (project_id,))
+                LEFT JOIN project_enrollments pe ON u.id = pe.user_id AND pe.project_id = %s
+                LEFT JOIN groups g ON pe.group_id = g.id
+                WHERE (pe.project_id = %s OR u.id IN (SELECT assigned_to FROM tasks WHERE project_id = %s AND assigned_to IS NOT NULL))
+                  AND (u.role = 'student' OR u.role IS NULL)
+                ORDER BY u.name ASC
+            """, (project_id, project_id, project_id))
             members = cursor.fetchall()
         return jsonify(members), 200
     finally:
