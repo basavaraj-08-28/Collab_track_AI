@@ -19,7 +19,6 @@ import {
   Paperclip, 
   X, 
   CheckCircle2, 
-  File, 
   AlertCircle,
   Award,
   Download,
@@ -224,11 +223,17 @@ export const MyTasksPage = () => {
     try {
       const fileName = attachedFile ? attachedFile.name : null;
       let fileData = null;
-      if (attachedFile && attachedFile instanceof File) {
+      const isNewFile =
+        attachedFile &&
+        !attachedFile.isExisting &&
+        ((typeof window !== 'undefined' && window.Blob && attachedFile instanceof window.Blob) ||
+          (typeof attachedFile.slice === 'function'));
+
+      if (isNewFile && typeof FileReader !== 'undefined') {
         fileData = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
+          reader.onerror = () => reject(new Error('Failed to read the attached file deliverable.'));
           reader.readAsDataURL(attachedFile);
         });
       }
